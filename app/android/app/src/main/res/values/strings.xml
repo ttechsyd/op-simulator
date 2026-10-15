@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">OP Sim</string>
+    <string name="title_activity_main">OP Sim</string>
+    <string name="package_name">com.opsim.app</string>
+    <string name="custom_url_scheme">com.opsim.app</string>
+</resources>

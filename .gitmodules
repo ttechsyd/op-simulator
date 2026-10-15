@@ -1,0 +1,3 @@
+[submodule "tcg-engines"]
+	path = tcg-engines
+	url = https://github.com/TheCardGoat/tcg-engines.git
