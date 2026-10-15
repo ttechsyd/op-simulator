@@ -10,14 +10,22 @@ import {
 import { Hand, Seat } from "./Board";
 import { GameOver, PromptSheet, SetupSheet } from "./Overlays";
 import { Preview } from "./Preview";
+import { Tray, trayMode } from "./Tray";
+import { Log } from "./Log";
+import { BattleArrow, useCardMotion } from "./anim";
 import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "./drag";
 import { BOT, DECKS, ME, newMatch, pendingPrompt, useMatch, type DeckId } from "./match";
 import { cardName } from "./cards";
 
+// ?seed=123&mine=red-aggro&theirs=st01 skips the menu, handy for replaying a hand
+const params = new URLSearchParams(location.search);
+
 export default function App() {
-  const [mine, setMine] = useState<DeckId>("st01");
-  const [theirs, setTheirs] = useState<DeckId>("red-aggro");
-  const [match, setMatch] = useState<MatchState | null>(null);
+  const [mine, setMine] = useState<DeckId>((params.get("mine") as DeckId) ?? "st01");
+  const [theirs, setTheirs] = useState<DeckId>((params.get("theirs") as DeckId) ?? "red-aggro");
+  const [match, setMatch] = useState<MatchState | null>(() =>
+    params.has("seed") ? newMatch(mine, theirs, Number(params.get("seed"))) : null,
+  );
   // the running Game swaps in its own handler; false means "nothing to close, leave the app"
   const onBack = useRef<() => boolean>(() => false);
 
@@ -62,13 +70,24 @@ function Game({
   onQuit: () => void;
   onBack: MutableRefObject<() => boolean>;
 }) {
-  const { state, send, error } = useMatch(initial);
+  const { state, send, error, undo } = useMatch(initial);
   const [preview, setPreview] = useState<{ group: ProjectedCard[]; start: number } | null>(null);
   const [layout, setLayout] = useState<Layout>([null, null, null, null, null]);
+  const [showLog, setShowLog] = useState(false);
+  useCardMotion(state);
 
   const view = useMemo(() => projectStateForSeat(state, ME), [state]);
   const prompt = pendingPrompt(state);
   const myPrompt = prompt?.seat === ME ? prompt : null;
+  const tray = myPrompt ? trayMode(myPrompt) : null;
+  // blocker and counter steps play out on the board: drag the card onto the attacker or the defender
+  const intent = myPrompt?.resolutionContext?.intent;
+  const battleStep = intent === "battleCounter" ? "counter" : intent === "battleBlocker" ? "block" : null;
+  const stepIds = useMemo(() => {
+    const s = new Set<string>();
+    if (battleStep && myPrompt) for (const o of myPrompt.options) if (o.targetId && o.enabled !== false) s.add(o.targetId);
+    return s;
+  }, [battleStep, myPrompt]);
   const myTurn = state.status === "active" && state.activeSeat === ME && !prompt;
   const legal = useMemo(() => getLegalCommands(state, ME), [state]);
   const potential = useMemo(
@@ -101,6 +120,10 @@ function Game({
         setPreview(null);
         return true;
       }
+      if (showLog) {
+        setShowLog(false);
+        return true;
+      }
       if (myPrompt) return true;
       if (state.status === "finished" || confirm("Leave the match?")) onQuit();
       return true;
@@ -108,7 +131,7 @@ function Game({
     return () => {
       onBack.current = () => false;
     };
-  }, [preview, myPrompt, state.status, onQuit, onBack]);
+  }, [preview, showLog, myPrompt, state.status, onQuit, onBack]);
 
   const canAct = useMemo(() => {
     const s = new Set<string>();
@@ -117,6 +140,8 @@ function Game({
   }, [potential]);
 
   const battle = state.battle;
+  // the engine only folds counters into defensePower when it compares, so add them while the step runs
+  const defense = battle ? battle.defensePower + (battle.powerCompared ? 0 : battle.counterTotal) : 0;
   const battleIds = useMemo(() => {
     const s = new Set<string>();
     if (battle) {
@@ -131,7 +156,14 @@ function Game({
     if (c.hidden || !c.cardId) return;
     const open = () => setPreview({ group, start: group.indexOf(c) });
     let source: DragSource = { kind: "look", card: c };
-    if (c.owner === ME && c.zone === "hand") source = { kind: "hand", card: c };
+    if (battleStep && myPrompt && battle && c.instanceId && stepIds.has(c.instanceId)) {
+      source = {
+        kind: "free",
+        cardId: c.cardId,
+        targets: new Set([battleStep === "counter" ? `mine:${battle.targetId}` : `opp:${battle.attackerId}`]),
+        drop: () => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [c.instanceId!] }),
+      };
+    } else if (c.owner === ME && c.zone === "hand") source = { kind: "hand", card: c };
     else if (c.owner === ME && (c.zone === "leader" || c.zone === "character")) source = { kind: "attacker", card: c };
     press(e, source, open);
   };
@@ -164,10 +196,10 @@ function Game({
         {battle ? (
           <span className="battle">
             {cardName(state.cards[battle.attackerId].cardId)} {battle.attackPower} ⚔{" "}
-            {cardName(state.cards[battle.targetId].cardId)} {battle.defensePower} · {battle.step}
+            {cardName(state.cards[battle.targetId].cardId)} {defense}
           </span>
         ) : (
-          <span className="logline">{lastLog?.message ?? ""}</span>
+          <button className="logline" onClick={() => setShowLog((v) => !v)}>{lastLog?.message ?? "…"}</button>
         )}
       </div>
 
@@ -177,21 +209,61 @@ function Game({
         press={pressCard}
         pressDon={myTurn ? pressDon : undefined}
         drop={drop}
-        litIds={new Set([...battleIds, ...canAct])}
-        corner={endTurn ? <button className="end" onClick={() => send({ type: "endTurn", seat: ME })}>End turn</button> : null}
+        litIds={new Set([...battleIds, ...canAct, ...stepIds])}
+        deckSplit={
+          tray === "place" && myPrompt
+            ? (half) => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, optionId: half })
+            : undefined
+        }
+        corner={
+          <>
+            {undo && myTurn && <button className="ghost small" onClick={undo}>Undo DON</button>}
+            {endTurn && <button className="end" onClick={() => send({ type: "endTurn", seat: ME })}>End turn</button>}
+          </>
+        }
       />
-      <Hand cards={view.players[ME].hand} press={pressCard} litIds={canAct} />
+      <div className="hand-wrap">
+        {myPrompt && battleStep && battle && (
+          <div className="battle-bar">
+            <span>
+              {cardName(state.cards[battle.attackerId].cardId)} {battle.attackPower} ⚔ {cardName(state.cards[battle.targetId].cardId)} {defense}
+              {battle.counterTotal > 0 && <small> (+{battle.counterTotal})</small>}
+            </span>
+            <span className="hint">
+              {battleStep === "counter"
+                ? stepIds.size ? "Drag a counter onto the defender" : "No counters in hand"
+                : "Drag a blocker onto the attacker"}
+            </span>
+            <button onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [] })}>
+              {battleStep === "counter" ? "No counter" : "No block"}
+            </button>
+          </div>
+        )}
+        <Hand cards={view.players[ME].hand} press={pressCard} litIds={battleStep ? stepIds : canAct} />
+      </div>
 
+      <BattleArrow battle={battle} />
       <DragLayer drag={drag} />
+      {showLog && <Log logs={view.logs} onClose={() => setShowLog(false)} />}
 
       {state.status === "setup" && <SetupSheet legal={legal} send={send} />}
-      {myPrompt && <PromptSheet key={myPrompt.id} prompt={myPrompt} state={state} send={send} />}
-      {preview && !myPrompt && (
+      {myPrompt && tray && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} send={send} press={press} />}
+      {myPrompt && !tray && !battleStep && <PromptSheet key={myPrompt.id} prompt={myPrompt} state={state} send={send} />}
+      {preview && (!myPrompt || battleStep) && (
         <Preview
           group={preview.group}
           start={preview.start}
           state={state}
           actionsFor={actionsFor}
+          step={
+            battleStep && myPrompt
+              ? {
+                  label: battleStep === "counter" ? "Use counter" : "Block with this",
+                  ids: stepIds,
+                  pick: (id) => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [id] }),
+                }
+              : undefined
+          }
           send={send}
           onClose={() => setPreview(null)}
         />

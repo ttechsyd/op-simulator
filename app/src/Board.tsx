@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { MatchPhase, ProjectedCard, ProjectedPlayerState } from "@tcg/op-engine";
 import { cardImage } from "./cards";
 
@@ -40,11 +40,12 @@ export function CardView({
   const cls = ["card", size, card.rested ? "rested" : "", lit ? "lit" : "", dc].join(" ");
   const face =
     card.hidden || !card.cardId ? (
-      <div className={`${cls} back`} />
+      <div className={`${cls} back`} data-id={card.instanceId ?? undefined} />
     ) : (
       <div
         className={cls}
         data-drop={dropKey}
+        data-id={card.instanceId ?? undefined}
         onPointerDown={press ? (e) => press(e, card, group ?? [card]) : undefined}
       >
         <img src={cardImage(card.cardId)} alt={card.name ?? card.cardId} draggable={false} />
@@ -54,9 +55,9 @@ export function CardView({
   if (!card.attachedDon) return face;
   // attached DON peek out from under the card, like on a real table
   return (
-    <div className="stack" style={{ paddingBottom: card.attachedDon * 6 }}>
+    <div className="stack" style={{ paddingBottom: `calc(var(--tab) * ${card.attachedDon})` }}>
       {Array.from({ length: card.attachedDon }, (_, i) => (
-        <div key={i} className="don-under" style={{ top: (i + 1) * 6 }} />
+        <div key={i} className="don-under" style={{ top: `calc(var(--tab) * ${i + 1})` }} />
       ))}
       {face}
     </div>
@@ -107,6 +108,7 @@ export function Seat({
   drop,
   litIds,
   corner,
+  deckSplit,
 }: {
   p: ProjectedPlayerState;
   opponent?: boolean;
@@ -116,8 +118,21 @@ export function Seat({
   drop?: Drop;
   litIds?: Set<string>;
   corner?: ReactNode;
+  // a "top or bottom of the deck" prompt is answered by dropping or tapping on half the pile
+  deckSplit?: (half: "top" | "bottom") => void;
 }) {
   const lit = (c: ProjectedCard | null) => !!c?.instanceId && !!litIds?.has(c.instanceId);
+  // the leader flinches when a life card is taken
+  const [hit, setHit] = useState(false);
+  const lastLife = useRef(p.lifeCount);
+  useEffect(() => {
+    const dropped = p.lifeCount < lastLife.current;
+    lastLife.current = p.lifeCount;
+    if (!dropped) return;
+    setHit(true);
+    const t = setTimeout(() => setHit(false), 500);
+    return () => clearTimeout(t);
+  }, [p.lifeCount]);
   const field = [p.leader, ...p.characters, p.stage].filter((c): c is ProjectedCard => !!c);
   const own = opponent ? "opp" : "mine";
   const key = (c: ProjectedCard | null, empty?: string) => (c?.instanceId ? `${own}:${c.instanceId}` : empty);
@@ -144,7 +159,9 @@ export function Seat({
 
       <div className="z-lead">
         <Phases current={phase} />
-        <CardView card={p.leader} group={field} press={press} lit={lit(p.leader)} dropKey={key(p.leader)} drop={drop} />
+        <div className={hit ? "hit" : ""}>
+          <CardView card={p.leader} group={field} press={press} lit={lit(p.leader)} dropKey={key(p.leader)} drop={drop} />
+        </div>
         <CardView card={p.stage} group={field} press={press} dropKey={opponent ? undefined : "stage"} drop={drop} />
       </div>
 
@@ -152,6 +169,17 @@ export function Seat({
         <div className="pile deck">
           <div className="card back" />
           <span className="count">{p.deckCount}</span>
+          {deckSplit &&
+            (["top", "bottom"] as const).map((half) => (
+              <div
+                key={half}
+                className={`deck-half ${half} ${dropClass(`deck:${half}`, drop) || "drop-ok"}`}
+                data-drop={`deck:${half}`}
+                onClick={() => deckSplit(half)}
+              >
+                {half}
+              </div>
+            ))}
         </div>
         <div className="pile trash">
           <CardView card={trashTop} group={p.trash} press={press} />

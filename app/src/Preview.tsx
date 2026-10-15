@@ -21,6 +21,7 @@ export function Preview({
   start,
   state,
   actionsFor,
+  step,
   send,
   onClose,
 }: {
@@ -28,6 +29,8 @@ export function Preview({
   start: number;
   state: MatchState;
   actionsFor: (card: ProjectedCard) => PotentialCardCommandDescriptor[];
+  // during a blocker or counter step the strip offers the prompt's answer on each usable card
+  step?: { label: string; ids: Set<string>; pick: (id: string) => void };
   send: (c: EngineCommand) => void;
   onClose: () => void;
 }) {
@@ -89,6 +92,9 @@ export function Preview({
             <div className="pv-card" key={card.instanceId ?? i}>
               <img src={cardImage(card.cardId!)} alt={card.name ?? ""} draggable={false} />
               <div className="pv-actions">
+                {step && card.instanceId && step.ids.has(card.instanceId) && (
+                  <button onClick={() => { step.pick(card.instanceId!); onClose(); }}>{step.label}</button>
+                )}
                 {pick
                   ? [
                       ...pick.targetIds!.map((t) => (

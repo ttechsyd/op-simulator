@@ -31,3 +31,11 @@ The code in this repo must not read as AI-generated. Concretely:
   printing's `imageUrl`, never bundled.
 - Build the engine before the app: `pnpm exec turbo run build` in the one-piece workspace.
 - Git has `core.longpaths` on for this clone; leave it.
+
+## Multiplayer is coming
+
+The bot is a stand-in for a real opponent. Keep the client seat-blind: draw the table from
+`projectStateForSeat(state, ME)` and send `EngineCommand`s through one `send`; nothing in the
+UI may peek at the opponent's hidden cards or drive their prompts. Anything that only works
+because both seats live in the same process (undo snapshots, bot timers) stays inside
+`match.ts` so a network transport can replace it.

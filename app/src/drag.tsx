@@ -8,7 +8,10 @@ export type DragSource =
   | { kind: "hand"; card: ProjectedCard }
   | { kind: "attacker"; card: ProjectedCard }
   | { kind: "don" }
-  | { kind: "look"; card: ProjectedCard };
+  | { kind: "look"; card: ProjectedCard }
+  // a one-off drag whose targets and effect the caller decides: tray cards onto the
+  // deck, counters onto the defender, blockers onto the attacker
+  | { kind: "free"; cardId: string; targets: Set<string>; drop: (key: string) => void };
 
 // drop keys are plain strings on data-drop attributes:
 //   slot:<n>  stage  side  mine:<instanceId>  opp:<instanceId>
@@ -48,6 +51,7 @@ export function useDrag(
 
   const targetsFor = (source: DragSource): Set<string> => {
     const out = new Set<string>();
+    if (source.kind === "free") return source.targets;
     if (source.kind === "hand") {
       const a = potential.find((p) => p.type === "playCard" && p.sourceId === source.card.instanceId);
       if (!a?.enabled) return out;
@@ -71,7 +75,8 @@ export function useDrag(
 
   const perform = (source: DragSource, key: string) => {
     const [kind, arg] = key.split(":");
-    if (source.kind === "hand") {
+    if (source.kind === "free") source.drop(key);
+    else if (source.kind === "hand") {
       const a = potential.find((p) => p.type === "playCard" && p.sourceId === source.card.instanceId);
       send({ type: "playCard", seat: ME, instanceId: source.card.instanceId!, slotIndex: a?.slotChoices?.[0] });
       if (kind === "slot") place(source.card.instanceId!, Number(arg));
@@ -165,8 +170,14 @@ export function DragLayer({ drag }: { drag: DragState | null }) {
           />
         </svg>
       )}
-      <div className={`ghost ${source.kind === "don" ? "don-ghost" : ""}`} style={{ left: x, top: y }}>
-        {source.kind === "don" ? <div className="don" /> : source.kind !== "look" && <img src={cardImage(source.card.cardId!)} alt="" />}
+      <div className={`drag-ghost ${source.kind === "don" ? "don-ghost" : ""}`} style={{ left: x, top: y }}>
+        {source.kind === "don" ? (
+          <div className="don" />
+        ) : source.kind === "free" ? (
+          <img src={cardImage(source.cardId)} alt="" />
+        ) : (
+          source.kind !== "look" && <img src={cardImage(source.card.cardId!)} alt="" />
+        )}
       </div>
     </>
   );

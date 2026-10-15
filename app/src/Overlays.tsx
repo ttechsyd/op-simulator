@@ -75,7 +75,7 @@ export function PromptSheet({
       <h3>{prompt.label}</h3>
       {b && (
         <p className="battle-line">
-          {instanceName(state, b.attackerId)} {b.attackPower} ⚔ {instanceName(state, b.targetId)} {b.defensePower}
+          {instanceName(state, b.attackerId)} {b.attackPower} ⚔ {instanceName(state, b.targetId)} {b.defensePower + (b.powerCompared ? 0 : b.counterTotal)}
         </p>
       )}
       {prompt.details && <p className="hint">{prompt.details}</p>}

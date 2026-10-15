@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   applyCommand,
   createMatch,
@@ -36,10 +36,10 @@ function playerConfig(deck: DeckId, playerName: string): MatchPlayerConfig {
   return { leaderCardId: d.leaderId, mainDeck: [...d.mainDeck], donDeckCount: 10, playerName };
 }
 
-export function newMatch(mine: DeckId, theirs: DeckId): MatchState {
+export function newMatch(mine: DeckId, theirs: DeckId, seed = Date.now()): MatchState {
   return createMatch({
     firstPlayer: ME,
-    seed: Date.now(),
+    seed,
     shuffleDecks: true,
     skipFirstTurnDraw: true,
     players: { south: playerConfig(mine, "You"), north: playerConfig(theirs, "Bot") },
@@ -76,16 +76,33 @@ function botCommand(state: MatchState): EngineCommand | null {
 export function useMatch(initial: MatchState) {
   const [state, setState] = useState(initial);
   const [error, setError] = useState<string | null>(null);
+  const current = useRef(initial);
+  // DON attachments can be taken back until anything else happens, like asking
+  // your opponent "wait, I meant the other one"
+  const past = useRef<MatchState[]>([]);
+  const [undoable, setUndoable] = useState(false);
+
+  const commit = (s: MatchState) => {
+    current.current = s;
+    setState(s);
+    setUndoable(past.current.length > 0);
+  };
 
   const send = useCallback((cmd: EngineCommand) => {
-    setState((s) => {
-      const r = applyCommand(s, cmd);
-      if (!r.accepted) {
-        setError(r.reason ?? "That move isn't allowed right now");
-        return s;
-      }
-      return r.state;
-    });
+    const s = current.current;
+    const r = applyCommand(s, cmd);
+    if (!r.accepted) {
+      setError(r.reason ?? "That move isn't allowed right now");
+      return;
+    }
+    if (cmd.type === "attachDon" && cmd.seat === ME) past.current.push(s);
+    else past.current = [];
+    commit(r.state);
+  }, []);
+
+  const undo = useCallback(() => {
+    const s = past.current.pop();
+    if (s) commit(s);
   }, []);
 
   useEffect(() => {
@@ -102,5 +119,5 @@ export function useMatch(initial: MatchState) {
     return () => clearTimeout(t);
   }, [error]);
 
-  return { state, send, error };
+  return { state, send, error, undo: undoable ? undo : null };
 }

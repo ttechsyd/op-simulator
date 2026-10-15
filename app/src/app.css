@@ -8,10 +8,11 @@
   --lit: #5ad1ff;
   --zone: rgba(255, 255, 255, 0.06);
   --zone-line: rgba(255, 255, 255, 0.14);
-  --card-w: 42px;
-  --opp-card-w: 36px;
-  --hand-w: 62px;
+  --card-w: 58px;
+  --opp-card-w: 54px;
+  --hand-w: 92px;
   --don-w: 20px;
+  --tab: 7px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--ink);
 }
@@ -58,7 +59,7 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 .table {
   height: 100%;
   display: grid;
-  grid-template-rows: auto auto auto auto;
+  grid-template-rows: auto auto auto minmax(96px, 1fr);
   align-content: start;
   row-gap: 1px;
   padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px, env(safe-area-inset-left));
@@ -66,19 +67,19 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 }
 
 /*
- * one half of the mat, same zones as the printed playmat:
- *   life | character area        |
- *   life | phases leader stage   | deck
- *   don  | cost area             | trash
- * the opponent's half is the same grid flipped point-wise so it reads across the table
+ * one half of the mat. The printed playmat stacks the character area above the
+ * leader row, but on a phone held sideways height is what we're short of, so the
+ * whole field sits on one line and the DON row goes under it:
+ *   life | character area | phases leader stage | deck trash | name
+ *   don  | cost area                                         | buttons
+ * the opponent's half is the same thing flipped so it reads across the table
  */
 .seat {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto auto;
   grid-template-areas:
-    "life  chars  corner"
-    "life  lead   piles"
-    "don   cost   cost";
+    "life  chars  lead  piles corner"
+    "don   cost   cost  cost  corner";
   column-gap: 8px;
   row-gap: 3px;
   align-items: center;
@@ -86,11 +87,10 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 .seat.opp {
   --card-w: var(--opp-card-w);
   --don-w: 16px;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto auto auto 1fr auto;
   grid-template-areas:
-    "cost   cost   don"
-    "piles  lead   life"
-    "corner chars  life";
+    "corner cost  cost  cost  don"
+    "corner piles lead  chars life";
 }
 .seat.opp .z-chars, .seat.opp .z-lead, .seat.opp .z-cost { flex-direction: row-reverse; }
 .seat.opp .z-corner { text-align: left; }
@@ -113,7 +113,7 @@ button small { display: block; font-size: 10px; color: var(--muted); }
   padding: 2px 8px;
   background: var(--zone); border: 1px solid var(--zone-line); border-radius: 6px;
 }
-.z-corner { grid-area: corner; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 11px; color: var(--muted); }
+.z-corner { grid-area: corner; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 6px; font-size: 11px; color: var(--muted); min-width: 64px; }
 .seat.opp .z-corner { align-items: flex-start; }
 .z-corner b { color: var(--ink); }
 
@@ -132,6 +132,7 @@ button small { display: block; font-size: 10px; color: var(--muted); }
   flex: none;
   transition: transform 120ms;
 }
+.card:not(.slot) { background: #1b2430; }
 .card.inhand { width: var(--hand-w); }
 .card img { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; display: block; }
 .card.slot { border: 1px dashed rgba(255,255,255,0.22); }
@@ -206,16 +207,17 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 .mid .logline { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 /* hand fans along the bottom edge, tucked so the board keeps its room; the preview is for reading */
+.hand-wrap { position: relative; display: flex; flex-direction: column; min-height: 0; }
 .hand {
+  flex: 1; min-height: 0;
   display: flex;
   justify-content: safe center;
   align-items: flex-start;
-  height: 42px;
   overflow: auto hidden;
   scrollbar-width: none;
   padding: 4px 24px 0;
 }
-.hand .card { margin-left: -18px; box-shadow: -2px 0 4px rgba(0,0,0,0.5); }
+.hand .card { margin-left: -26px; box-shadow: -2px 0 4px rgba(0,0,0,0.5); }
 .hand .card:first-child { margin-left: 0; }
 .hand .card.lit { z-index: 1; transform: translateY(-3px); }
 
@@ -293,22 +295,21 @@ button small { display: block; font-size: 10px; color: var(--muted); }
   font-size: 13px; z-index: 20;
 }
 
-@media (max-height: 380px) {
-  :root { --card-w: 40px; --opp-card-w: 34px; --hand-w: 58px; --don-w: 18px; }
+@media (max-height: 360px) {
+  :root { --card-w: 50px; --opp-card-w: 44px; --hand-w: 58px; --don-w: 18px; }
   .seat.opp { --don-w: 14px; }
-  .hand { height: 38px; }
 }
-@media (max-height: 340px) {
-  :root { --card-w: 36px; --opp-card-w: 30px; --hand-w: 52px; --don-w: 16px; }
-  .hand { height: 34px; }
+@media (max-width: 760px) {
+  :root { --card-w: 46px; --opp-card-w: 40px; }
 }
-@media (min-height: 430px) {
-  :root { --card-w: 52px; --opp-card-w: 44px; --hand-w: 76px; --don-w: 24px; }
-  .hand { height: 64px; }
+@media (min-height: 430px) and (min-width: 900px) {
+  :root { --card-w: 76px; --opp-card-w: 64px; --hand-w: 116px; --don-w: 26px; --tab: 11px; }
+  .seat.opp { --don-w: 20px; }
+  .hand .card { margin-left: -30px; }
+  .phase { font-size: 9px; padding: 3px 7px; }
 }
-@media (min-width: 900px) and (min-height: 560px) {
-  :root { --card-w: 72px; --opp-card-w: 60px; --hand-w: 100px; --don-w: 30px; }
-  .hand { height: 90px; }
+@media (min-width: 1100px) and (min-height: 560px) {
+  :root { --card-w: 80px; --opp-card-w: 68px; --hand-w: 120px; --don-w: 30px; --tab: 12px; }
 }
 
 /* dragging: the board cards are the handles, the engine says where they may land */
@@ -319,12 +320,100 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 .seat.drop-ok { outline-offset: -2px; }
 .drop-over { outline: 3px solid var(--accent); outline-offset: 1px; box-shadow: 0 0 12px var(--accent); }
 .card.slot.drop-over { background: rgba(242, 177, 52, 0.25); }
-.ghost {
+.drag-ghost {
   position: fixed; z-index: 30; pointer-events: none;
   width: 70px; transform: translate(-50%, -60%) rotate(-3deg);
   filter: drop-shadow(0 10px 14px rgba(0,0,0,0.6));
 }
-.ghost img { width: 100%; border-radius: 5px; display: block; }
-.ghost.don-ghost { width: 28px; }
-.ghost.don-ghost .don { width: 28px; }
+.drag-ghost img { width: 100%; border-radius: 5px; display: block; }
+.drag-ghost.don-ghost { width: 28px; }
+.drag-ghost.don-ghost .don { width: 28px; }
 .drag-arrow { position: fixed; inset: 0; z-index: 25; pointer-events: none; }
+
+/* tray: a search, look-at, order or trigger prompt laid out face up over the far side of the table */
+.tray {
+  position: fixed; top: env(safe-area-inset-top); left: 0; right: 0; z-index: 10;
+  background: rgba(6, 11, 16, 0.94);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  padding: 5px 0 7px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.tray-head {
+  display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted);
+  padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left));
+  white-space: nowrap; overflow: hidden;
+}
+.tray-head b { color: var(--ink); flex: none; }
+.tray-head .battle { margin-left: auto; color: var(--accent); font-weight: 600; }
+.tray .strip { padding: 6px max(20px, env(safe-area-inset-right)) 2px max(20px, env(safe-area-inset-left)); gap: 10px; scroll-snap-type: none; }
+.tray-card {
+  flex: none; position: relative; border-radius: 8px;
+  height: min(calc(100vh - 150px), 300px); aspect-ratio: 0.716;
+  transition: transform 0.15s, opacity 0.15s;
+  touch-action: pan-x;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+}
+.tray-card img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block; }
+.tray-card.on { outline: 3px solid var(--lit); box-shadow: 0 0 16px var(--lit); transform: translateY(-6px); }
+.tray-card.off { opacity: 0.35; }
+.tray-card.hole { opacity: 0.25; outline: 2px dashed var(--accent); }
+.tray-card .n {
+  position: absolute; top: 5px; left: 5px; z-index: 1;
+  background: #000d; color: #fff; font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 9px;
+}
+.tray.order .tray-card { touch-action: none; cursor: grab; }
+.tray.place .tray-card { height: 112px; }
+.tray.trigger .tray-card { height: min(calc(100vh - 150px), 300px); }
+.tray-actions { display: flex; justify-content: center; gap: 8px; padding: 0 14px; min-height: 30px; }
+.tray-actions button { min-height: 30px; padding: 3px 14px; font-size: 12px; }
+.tray-actions:empty { display: none; }
+.deck-half {
+  position: absolute; left: 0; right: 0; height: 50%; z-index: 3;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700; text-transform: uppercase; color: #fff;
+  background: rgba(0,0,0,0.4); border-radius: 3px;
+}
+.deck-half.top { top: 0; }
+.deck-half.bottom { bottom: 0; }
+
+/* floating log over the right edge; the board stays live beside it */
+.mid .logline { background: none; min-height: 0; padding: 0 6px; font: inherit; color: inherit; border-radius: 4px; }
+.mid .logline:active { background: rgba(255,255,255,0.1); }
+.log {
+  position: fixed; top: max(6px, env(safe-area-inset-top)); bottom: max(6px, env(safe-area-inset-bottom)); right: max(6px, env(safe-area-inset-right));
+  width: min(300px, 42vw); z-index: 8;
+  display: flex; flex-direction: column;
+  background: rgba(8, 14, 20, 0.9); border: 1px solid #2c3d4e; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.log-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 4px 12px; font-size: 12px; border-bottom: 1px solid #2c3d4e; }
+.log-body { flex: 1; overflow-y: auto; padding: 6px 10px; font-size: 11px; line-height: 1.35; color: var(--muted); }
+.log-line { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.log-line.me { color: var(--ink); }
+.log-line .turn { display: block; color: var(--accent); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; margin: 6px 0 2px; }
+
+/* motion */
+.hit { animation: flinch 0.45s ease-out; }
+@keyframes flinch {
+  0%, 100% { transform: none; }
+  20% { transform: translate(-4px, 2px) rotate(-3deg); }
+  45% { transform: translate(4px, -2px) rotate(3deg); }
+  70% { transform: translate(-2px, 1px); }
+}
+.don-under { animation: don-in 0.25s ease-out; }
+@keyframes don-in {
+  from { transform: translate(-18px, 14px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.battle-arrow { z-index: 4; opacity: 0.85; }
+
+/* blocker and counter steps: the board stays live, this strip sits above the hand */
+.battle-bar {
+  position: absolute; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%);
+  z-index: 6; display: flex; align-items: center; gap: 12px;
+  padding: 6px 12px; border-radius: 10px;
+  background: rgba(8, 14, 20, 0.92); border: 1px solid #3a2f0a; box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+  font-size: 12px; color: var(--accent); font-weight: 600; white-space: nowrap;
+}
+.battle-bar .hint { margin: 0; color: var(--muted); font-weight: 400; font-size: 11px; }
+.battle-bar button { min-height: 28px; padding: 2px 10px; font-size: 12px; }

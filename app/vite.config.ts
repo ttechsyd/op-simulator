@@ -4,6 +4,8 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
+    // cap sync copies the build into android/, which otherwise trips the watcher
+    watch: { ignored: ["**/android/**", "**/dist/**"] },
     port: 5180,
     fs: { allow: [".", "../tcg-engines"] },
   },
