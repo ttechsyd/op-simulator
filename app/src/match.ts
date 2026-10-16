@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   applyCommand,
   createMatch,
@@ -46,12 +46,86 @@ export function newMatch(mine: DeckId, theirs: DeckId, seed = Date.now()): Match
   });
 }
 
-const rng = { random: Math.random };
-const setupTypes = new Set(["chooseJoKenPo", "chooseFirstPlayer", "mulligan", "keepHand", "startGame"]);
-
 export function pendingPrompt(state: MatchState) {
   return state.promptQueue.find((p) => p.status === "pending") ?? null;
 }
+
+// The table is the client's only view of the game: whatever sits on the other
+// side of it (the local bot today, a server with a real opponent later) owns the
+// opponent's seat and the authoritative state. The UI never sees past this.
+export type Table = {
+  readonly state: MatchState;
+  send(cmd: EngineCommand): void;
+  // only there while something can be taken back; a remote table won't offer it
+  readonly undo?: () => void;
+  subscribe(fn: (ev: TableEvent) => void): () => void;
+  close(): void;
+};
+
+export type TableEvent = { kind: "changed" } | { kind: "rejected"; reason: string };
+
+export function localTable(initial: MatchState): Table {
+  let state = initial;
+  // DON attachments can be taken back until anything else happens, like asking
+  // your opponent "wait, I meant the other one"
+  let past: MatchState[] = [];
+  const listeners = new Set<(ev: TableEvent) => void>();
+  let botTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const emit = (ev: TableEvent) => listeners.forEach((fn) => fn(ev));
+
+  const send = (cmd: EngineCommand) => {
+    const r = applyCommand(state, cmd);
+    if (!r.accepted) {
+      emit({ kind: "rejected", reason: r.reason ?? "That move isn't allowed right now" });
+      return;
+    }
+    if (cmd.type === "attachDon" && cmd.seat === ME) past.push(state);
+    else past = [];
+    commit(r.state);
+  };
+
+  const takeBack = () => {
+    const s = past.pop();
+    if (s) commit(s);
+  };
+
+  const commit = (s: MatchState) => {
+    state = s;
+    emit({ kind: "changed" });
+    wakeBot();
+  };
+
+  const wakeBot = () => {
+    clearTimeout(botTimer);
+    const cmd = botCommand(state);
+    if (!cmd) return;
+    botTimer = setTimeout(() => send(cmd), state.status === "setup" ? 250 : 550);
+  };
+
+  wakeBot();
+
+  return {
+    get state() {
+      return state;
+    },
+    get undo() {
+      return past.length ? takeBack : undefined;
+    },
+    send,
+    subscribe(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    close() {
+      clearTimeout(botTimer);
+      listeners.clear();
+    },
+  };
+}
+
+const rng = { random: Math.random };
+const setupTypes = new Set(["chooseJoKenPo", "chooseFirstPlayer", "mulligan", "keepHand", "startGame"]);
 
 function botCommand(state: MatchState): EngineCommand | null {
   const prompt = pendingPrompt(state);
@@ -74,44 +148,27 @@ function botCommand(state: MatchState): EngineCommand | null {
 }
 
 export function useMatch(initial: MatchState) {
-  const [state, setState] = useState(initial);
+  // TODO: pick a remote table here once there's a server to talk to; the rest of
+  // the hook and everything in App.tsx shouldn't need to know which it got
+  const [table] = useState(() => localTable(initial));
+  const [state, setState] = useState(table.state);
+  const [undo, setUndo] = useState(() => table.undo ?? null);
   const [error, setError] = useState<string | null>(null);
-  const current = useRef(initial);
-  // DON attachments can be taken back until anything else happens, like asking
-  // your opponent "wait, I meant the other one"
-  const past = useRef<MatchState[]>([]);
-  const [undoable, setUndoable] = useState(false);
-
-  const commit = (s: MatchState) => {
-    current.current = s;
-    setState(s);
-    setUndoable(past.current.length > 0);
-  };
-
-  const send = useCallback((cmd: EngineCommand) => {
-    const s = current.current;
-    const r = applyCommand(s, cmd);
-    if (!r.accepted) {
-      setError(r.reason ?? "That move isn't allowed right now");
-      return;
-    }
-    if (cmd.type === "attachDon" && cmd.seat === ME) past.current.push(s);
-    else past.current = [];
-    commit(r.state);
-  }, []);
-
-  const undo = useCallback(() => {
-    const s = past.current.pop();
-    if (s) commit(s);
-  }, []);
 
   useEffect(() => {
-    const cmd = botCommand(state);
-    if (!cmd) return;
-    const wait = state.status === "setup" ? 250 : 550;
-    const t = setTimeout(() => send(cmd), wait);
-    return () => clearTimeout(t);
-  }, [state, send]);
+    const off = table.subscribe((ev) => {
+      if (ev.kind === "rejected") {
+        setError(ev.reason);
+        return;
+      }
+      setState(table.state);
+      setUndo(() => table.undo ?? null);
+    });
+    return () => {
+      off();
+      table.close();
+    };
+  }, [table]);
 
   useEffect(() => {
     if (!error) return;
@@ -119,5 +176,5 @@ export function useMatch(initial: MatchState) {
     return () => clearTimeout(t);
   }, [error]);
 
-  return { state, send, error, undo: undoable ? undo : null };
+  return { state, send: table.send, error, undo };
 }

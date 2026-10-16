@@ -193,13 +193,16 @@ function Game({
       />
 
       <div className="mid">
-        {battle ? (
+        {battle && (
           <span className="battle">
             {cardName(state.cards[battle.attackerId].cardId)} {battle.attackPower} ⚔{" "}
             {cardName(state.cards[battle.targetId].cardId)} {defense}
           </span>
+        )}
+        {prompt && prompt.seat !== ME ? (
+          <span className="waiting">{battle && " · "}Waiting for opponent…</span>
         ) : (
-          <button className="logline" onClick={() => setShowLog((v) => !v)}>{lastLog?.message ?? "…"}</button>
+          !battle && <button className="logline" onClick={() => setShowLog((v) => !v)}>{lastLog?.message ?? "…"}</button>
         )}
       </div>
 
