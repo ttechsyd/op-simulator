@@ -6,7 +6,7 @@ export const bundleVersion: string = __BUNDLE_VERSION__;
 
 const VERSION_URL = "https://github.com/ttechsyd/op-simulator/releases/latest/download/version.json";
 
-export type Release = { version: string; engine: string; cards: number; url: string };
+export type Release = { version: string; engine: string; cards: number; url: string; checksum?: string };
 
 const native = Capacitor.isNativePlatform();
 
@@ -34,7 +34,8 @@ export async function checkForUpdate(): Promise<Check> {
 export async function applyUpdate(rel: Release, onProgress: (pct: number) => void) {
   const sub = await CapacitorUpdater.addListener("download", (e) => onProgress(e.percent));
   try {
-    const bundle = await CapacitorUpdater.download({ url: rel.url, version: rel.version });
+    // the updater refuses a download it can't verify
+    const bundle = await CapacitorUpdater.download({ url: rel.url, version: rel.version, checksum: rel.checksum });
     await CapacitorUpdater.set({ id: bundle.id });
   } finally {
     sub.remove();

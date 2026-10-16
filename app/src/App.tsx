@@ -33,6 +33,7 @@ export default function App() {
   const [saved, setSaved] = useState(loadDecks);
   const [check, setCheck] = useState<Check | "checking" | null>(null);
   const [pct, setPct] = useState<number | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const release = check !== null && check !== "checking" && check.status === "update" ? check.release : null;
 
   const lookForUpdate = () => {
@@ -92,10 +93,20 @@ export default function App() {
           <div className="update">
             <span>
               Card update {release.version}
-              <small>{release.cards} cards · engine {release.engine}</small>
+              <small>{updateError ? `Failed: ${updateError}` : `${release.cards} cards · engine ${release.engine}`}</small>
             </span>
             {pct === null ? (
-              <button className="small" onClick={() => { setPct(0); applyUpdate(release, setPct).catch(() => setPct(null)); }}>
+              <button
+                className="small"
+                onClick={() => {
+                  setPct(0);
+                  setUpdateError(null);
+                  applyUpdate(release, setPct).catch((e: Error) => {
+                    setPct(null);
+                    setUpdateError(e.message || "download failed");
+                  });
+                }}
+              >
                 Update
               </button>
             ) : (

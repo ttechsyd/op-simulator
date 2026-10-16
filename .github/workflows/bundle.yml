@@ -82,6 +82,7 @@ jobs:
             "version": "${{ steps.v.outputs.version }}",
             "engine": "${{ steps.v.outputs.engine }}",
             "cards": ${{ steps.cards.outputs.cards }},
+            "checksum": "$(sha256sum bundle.zip | cut -d' ' -f1)",
             "url": "https://github.com/${{ github.repository }}/releases/download/bundle-${{ steps.v.outputs.version }}/bundle.zip"
           }
           EOF
