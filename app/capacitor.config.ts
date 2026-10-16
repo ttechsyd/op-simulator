@@ -12,6 +12,9 @@ const config: CapacitorConfig = {
       // we drive updates ourselves from the menu
       autoUpdate: false,
       resetWhenUpdate: true,
+      // no phoning home: releases come from our own github repo
+      statsUrl: "",
+      updateUrl: "",
     },
   },
 };

@@ -1,4 +1,4 @@
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { CapacitorUpdater } from "@capgo/capacitor-updater";
 
 // stamped by the bundle workflow; a local build is just "dev"
@@ -18,9 +18,10 @@ export function appReady() {
 export async function checkForUpdate(): Promise<Release | null> {
   if (!native) return null;
   try {
-    const r = await fetch(VERSION_URL, { cache: "no-store" });
-    if (!r.ok) return null;
-    const rel = (await r.json()) as Release;
+    // native http: the webview's origin can't fetch from github under CORS
+    const r = await CapacitorHttp.get({ url: VERSION_URL, responseType: "json" });
+    if (r.status !== 200) return null;
+    const rel = (typeof r.data === "string" ? JSON.parse(r.data) : r.data) as Release;
     return rel.version && rel.version !== bundleVersion ? rel : null;
   } catch {
     return null;
