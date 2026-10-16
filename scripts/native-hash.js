@@ -9,8 +9,7 @@ const { execFileSync } = require("child_process");
 const root = path.join(__dirname, "..", "app");
 // only what git tracks, so a local checkout and the CI runner see the same set
 const files = execFileSync("git", ["ls-files", "android", "capacitor.config.ts"], { cwd: root, encoding: "utf8" })
-  .split("
-")
+  .split(/\r?\n/)
   .filter(Boolean)
   .sort()
   .map((f) => path.join(root, f));
