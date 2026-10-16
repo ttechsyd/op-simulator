@@ -18,7 +18,7 @@ import { BOT, DECKS, ME, newMatch, pendingPrompt, useMatch, type DeckId } from "
 import { cardName } from "./cards";
 import { Builder, DeckList } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, type Deck } from "./decks";
-import { appReady, applyUpdate, bundleVersion, checkForUpdate, type Release } from "./update";
+import { appReady, applyUpdate, bundleVersion, checkForUpdate, type Check } from "./update";
 
 // ?seed=123&mine=red-aggro&theirs=st01 skips the menu, handy for replaying a hand
 const params = new URLSearchParams(location.search);
@@ -31,12 +31,17 @@ export default function App() {
   );
   const [screen, setScreen] = useState<"menu" | "decks" | Deck>("menu");
   const [saved, setSaved] = useState(loadDecks);
-  const [release, setRelease] = useState<Release | null>(null);
+  const [check, setCheck] = useState<Check | "checking" | null>(null);
   const [pct, setPct] = useState<number | null>(null);
+  const release = check !== null && check !== "checking" && check.status === "update" ? check.release : null;
 
+  const lookForUpdate = () => {
+    setCheck("checking");
+    checkForUpdate().then(setCheck);
+  };
   useEffect(() => {
     appReady();
-    checkForUpdate().then(setRelease);
+    lookForUpdate();
   }, []);
   // the running Game swaps in its own handler; false means "nothing to close, leave the app"
   const onBack = useRef<() => boolean>(() => false);
@@ -98,7 +103,20 @@ export default function App() {
             )}
           </div>
         )}
-        <small className="ver">build {bundleVersion}</small>
+        <small className="ver">
+          build {bundleVersion} ·{" "}
+          {check === "checking" ? (
+            "checking…"
+          ) : check?.status === "current" ? (
+            <>up to date · <button className="link" onClick={lookForUpdate}>check again</button></>
+          ) : check?.status === "unreachable" ? (
+            <>couldn't reach GitHub · <button className="link" onClick={lookForUpdate}>retry</button></>
+          ) : check?.status === "browser" ? (
+            "updates only on the phone"
+          ) : (
+            <button className="link" onClick={lookForUpdate}>check for updates</button>
+          )}
+        </small>
       </div>
     );
   }

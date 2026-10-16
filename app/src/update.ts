@@ -15,16 +15,18 @@ export function appReady() {
   if (native) CapacitorUpdater.notifyAppReady().catch(() => {});
 }
 
-export async function checkForUpdate(): Promise<Release | null> {
-  if (!native) return null;
+export type Check = { status: "update"; release: Release } | { status: "current" } | { status: "unreachable" } | { status: "browser" };
+
+export async function checkForUpdate(): Promise<Check> {
+  if (!native) return { status: "browser" };
   try {
     // native http: the webview's origin can't fetch from github under CORS
     const r = await CapacitorHttp.get({ url: VERSION_URL, responseType: "json" });
-    if (r.status !== 200) return null;
+    if (r.status !== 200) return { status: "unreachable" };
     const rel = (typeof r.data === "string" ? JSON.parse(r.data) : r.data) as Release;
-    return rel.version && rel.version !== bundleVersion ? rel : null;
+    return rel.version && rel.version !== bundleVersion ? { status: "update", release: rel } : { status: "current" };
   } catch {
-    return null;
+    return { status: "unreachable" };
   }
 }
 
