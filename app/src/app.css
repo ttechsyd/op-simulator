@@ -468,3 +468,9 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 .dl-row img, .dl-row .card.slot { width: 40px; aspect-ratio: 0.716; border-radius: 4px; display: block; }
 .dl-row > div { flex: 1; display: flex; flex-direction: column; }
 .dl-row small { color: var(--muted); }
+
+.art-dl { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); padding: 4px 8px; }
+.art-bar { width: 140px; height: 6px; border-radius: 3px; background: #223240; overflow: hidden; }
+.art-bar div { height: 100%; background: var(--accent); transition: width 0.3s; }
+
+.deck-text { width: 100%; height: 160px; font: 13px/1.4 ui-monospace, monospace; color: var(--ink); background: #0a1118; border: 1px solid #3e556b; border-radius: 8px; padding: 8px; resize: none; }

@@ -75,3 +75,64 @@ export function prefetchImages(deck: Deck) {
   const ids = [deck.leader, ...Object.keys(deck.cards)].filter((x): x is string => !!x);
   for (const id of ids) fetch(cardImage(getCard(id).id), { mode: "no-cors" }).catch(() => {});
 }
+
+const ART_CACHE = "card-art-v1";
+
+export function allArtUrls(): string[] {
+  return allCards.filter((c) => c.cardType !== "don").map((c) => cardImage(c.id));
+}
+
+export async function cachedArtCount(): Promise<number> {
+  if (!("caches" in window)) return 0;
+  const keys = await (await caches.open(ART_CACHE)).keys();
+  return keys.length;
+}
+
+// pulls the whole catalog's art through the service worker, a few at a time
+export async function downloadArt(onProgress: (done: number, total: number) => void, signal: AbortSignal) {
+  const cache = await caches.open(ART_CACHE);
+  const have = new Set((await cache.keys()).map((r) => r.url));
+  const todo = allArtUrls().filter((u) => !have.has(u));
+  const total = allArtUrls().length;
+  let done = total - todo.length;
+  onProgress(done, total);
+  let i = 0;
+  const worker = async () => {
+    while (i < todo.length && !signal.aborted) {
+      const url = todo[i++];
+      await fetch(url, { mode: "no-cors", signal }).catch(() => {});
+      onProgress(++done, total);
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+}
+
+// the plain list format other sims and deck sites use: one "4xOP10-111" per line,
+// the leader in there as 1x like everything else
+export function deckToText(deck: Deck): string {
+  const lines = deck.leader ? [`1x${deck.leader}`] : [];
+  for (const [id, n] of Object.entries(deck.cards)) lines.push(`${n}x${id}`);
+  return lines.join("\n");
+}
+
+export function parseDeckText(text: string): { leader: string | null; cards: Record<string, number>; unknown: string[] } {
+  let leader: string | null = null;
+  const cards: Record<string, number> = {};
+  const unknown: string[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const m = raw.trim().match(/^(\d+)\s*[x×]?\s*([A-Za-z0-9]+-\d+[A-Za-z0-9_]*)/);
+    if (!m) continue;
+    const n = Number(m[1]);
+    const id = m[2].toUpperCase();
+    let card;
+    try {
+      card = getCard(id);
+    } catch {
+      unknown.push(id);
+      continue;
+    }
+    if (card.cardType === "leader") leader = card.id;
+    else cards[card.id] = Math.min(4, (cards[card.id] ?? 0) + n);
+  }
+  return { leader, cards, unknown };
+}

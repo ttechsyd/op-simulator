@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { OPCard } from "@tcg/op-types";
 import { getCard } from "@tcg/op-cards";
 import { cardImage } from "./cards";
-import { colorsOf, deckProblems, deckSize, leaders, mainCards, prefetchImages, saveDeck, type Deck } from "./decks";
+import { allArtUrls, cachedArtCount, colorsOf, deckToText, newDeck, parseDeckText, deckProblems, deckSize, downloadArt, leaders, mainCards, prefetchImages, saveDeck, type Deck } from "./decks";
 
 const COLORS = ["red", "green", "blue", "purple", "black", "yellow"] as const;
 const TYPES = ["character", "event", "stage"] as const;
@@ -10,6 +10,37 @@ const PAGE = 120;
 
 function cost(c: OPCard) {
   return "cost" in c ? c.cost : null;
+}
+
+// paste a list in, or copy this deck out
+function DeckText({ deck, onImport, onClose }: { deck: Deck | null; onImport: (text: string) => string | null; onClose: () => void }) {
+  const [text, setText] = useState(() => (deck ? deckToText(deck) : ""));
+  const [note, setNote] = useState<string | null>(null);
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <h3>{deck ? "Import or export" : "Import a deck"}</h3>
+        <p className="hint">One card per line, like 4xOP10-111. The leader goes in as 1x.</p>
+        <textarea className="deck-text" value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
+        {note && <p className="hint">{note}</p>}
+        <div className="actions">
+          <button onClick={() => { const r = onImport(text); if (r) setNote(r); }}>Import</button>
+          {deck && (
+            <button className="ghost" onClick={() => navigator.clipboard?.writeText(text).then(() => setNote("Copied"))}>Copy</button>
+          )}
+          <button className="ghost" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function applyText(text: string, into: Deck): { deck: Deck; note: string | null } {
+  const r = parseDeckText(text);
+  const deck = { ...into, leader: r.leader ?? into.leader, cards: r.cards };
+  const n = deckSize(deck);
+  const note = r.unknown.length ? `Skipped unknown cards: ${r.unknown.join(", ")}` : n === 0 ? "Nothing recognised" : null;
+  return { deck, note };
 }
 
 export function Builder({ initial, onDone }: { initial: Deck; onDone: () => void }) {
@@ -21,6 +52,7 @@ export function Builder({ initial, onDone }: { initial: Deck; onDone: () => void
   const [costs, setCosts] = useState<Set<number>>(new Set());
   const [limit, setLimit] = useState(PAGE);
   const [zoom, setZoom] = useState<OPCard | null>(null);
+  const [text, setText] = useState(false);
 
   const leader = deck.leader ? getCard(deck.leader) : null;
   const leaderColors = leader ? colorsOf(leader) : [];
@@ -89,8 +121,23 @@ export function Builder({ initial, onDone }: { initial: Deck; onDone: () => void
         </button>
         <span className={`b-count ${size === 50 ? "ok" : ""}`}>{size}/50</span>
         <span className="b-problems">{problems[0] ?? "Deck is legal"}</span>
+        <button className="ghost small" onClick={() => setText(true)}>Import / Export</button>
         <button className="end" onClick={save}>Save</button>
       </div>
+
+      {text && (
+        <DeckText
+          deck={deck}
+          onClose={() => setText(false)}
+          onImport={(t) => {
+            const r = applyText(t, deck);
+            setDeck(r.deck);
+            if (r.deck.leader) setPicking("cards");
+            if (!r.note) setText(false);
+            return r.note;
+          }}
+        />
+      )}
 
       <div className="b-browse">
         <div className="b-filters">
@@ -163,6 +210,39 @@ export function Builder({ initial, onDone }: { initial: Deck; onDone: () => void
   );
 }
 
+// every card face, so decks build and games play with no signal; it's a few hundred MB
+function ArtDownload() {
+  const [have, setHave] = useState(0);
+  const [total, setTotal] = useState(() => allArtUrls().length);
+  const [running, setRunning] = useState(false);
+  const abort = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    cachedArtCount().then(setHave);
+    return () => abort.current?.abort();
+  }, []);
+
+  const start = () => {
+    abort.current = new AbortController();
+    setRunning(true);
+    downloadArt((done, all) => { setHave(done); setTotal(all); }, abort.current.signal).finally(() => setRunning(false));
+  };
+  const stop = () => abort.current?.abort();
+
+  const pct = total ? Math.round((have / total) * 100) : 0;
+  return (
+    <div className="art-dl">
+      <div className="art-bar"><div style={{ width: `${pct}%` }} /></div>
+      <span>Card art offline: {have} / {total}{running ? " · downloading" : ""}</span>
+      {running ? (
+        <button className="ghost small" onClick={stop}>Stop</button>
+      ) : (
+        have < total && <button className="small" onClick={start}>Download all art</button>
+      )}
+    </div>
+  );
+}
+
 export function DeckList({ decks, onEdit, onNew, onDelete, onBack }: {
   decks: Deck[];
   onEdit: (d: Deck) => void;
@@ -170,14 +250,29 @@ export function DeckList({ decks, onEdit, onNew, onDelete, onBack }: {
   onDelete: (d: Deck) => void;
   onBack: () => void;
 }) {
+  const [importing, setImporting] = useState(false);
   return (
     <div className="decklist">
       <div className="b-head">
         <button className="ghost small" onClick={onBack}>‹ Menu</button>
         <h2>Your decks</h2>
+        <button className="ghost small" onClick={() => setImporting(true)}>Import</button>
         <button className="end" onClick={onNew}>New deck</button>
       </div>
+      {importing && (
+        <DeckText
+          deck={null}
+          onClose={() => setImporting(false)}
+          onImport={(t) => {
+            const r = applyText(t, { ...newDeck(), name: "Imported deck" });
+            if (deckSize(r.deck) === 0 && !r.deck.leader) return r.note ?? "Nothing recognised";
+            onEdit(r.deck);
+            return null;
+          }}
+        />
+      )}
       <div className="dl-body">
+        <ArtDownload />
         {decks.length === 0 && <p className="hint">No decks yet.</p>}
         {decks.map((d) => {
           const leader = d.leader ? getCard(d.leader) : null;
