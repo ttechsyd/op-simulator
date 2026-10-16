@@ -16,7 +16,7 @@ import { BattleArrow, useCardMotion } from "./anim";
 import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "./drag";
 import { BOT, DECKS, ME, newMatch, pendingPrompt, useMatch, type DeckId } from "./match";
 import { cardName } from "./cards";
-import { Builder, DeckList } from "./Builder";
+import { Builder, DeckList, DeckView } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from "./decks";
 import { appReady, applyUpdate, bundleVersion, checkForUpdate, installApk, type Check } from "./update";
 
@@ -29,7 +29,7 @@ export default function App() {
   const [match, setMatch] = useState<MatchState | null>(() =>
     params.has("seed") ? newMatch(mine, theirs, Number(params.get("seed"))) : null,
   );
-  const [screen, setScreen] = useState<"menu" | "decks" | Deck>("menu");
+  const [screen, setScreen] = useState<"menu" | "decks" | { view: Deck } | { edit: Deck }>("menu");
   const [saved, setSaved] = useState(loadDecks);
   const [check, setCheck] = useState<Check | "checking" | null>(null);
   const [pct, setPct] = useState<number | null>(null);
@@ -64,14 +64,25 @@ export default function App() {
       <DeckList
         decks={saved}
         onBack={() => setScreen("menu")}
-        onNew={() => setScreen(newDeck())}
-        onEdit={(d) => setScreen(d)}
-        onDelete={(d) => { deleteDeck(d.id); setSaved(loadDecks()); }}
+        onNew={() => setScreen({ edit: newDeck() })}
+        onOpen={(d) => setScreen({ view: d })}
+        onEdit={(d) => setScreen({ edit: d })}
       />
     );
   }
-  if (!match && typeof screen === "object") {
-    return <Builder initial={screen} onDone={() => { setSaved(loadDecks()); setScreen("decks"); }} />;
+  if (!match && typeof screen === "object" && "view" in screen) {
+    return (
+      <DeckView
+        deck={screen.view}
+        onBack={() => setScreen("decks")}
+        onEdit={() => setScreen({ edit: screen.view })}
+        onDelete={() => { deleteDeck(screen.view.id); setSaved(loadDecks()); setScreen("decks"); }}
+      />
+    );
+  }
+  if (!match && typeof screen === "object" && "edit" in screen) {
+    const d = screen.edit;
+    return <Builder initial={d} onDone={() => { const s = loadDecks(); setSaved(s); const kept = s.find((x) => x.id === d.id); setScreen(kept ? { view: kept } : "decks"); }} />;
   }
   if (!match) {
     const options = [...saved.map((d) => ({ id: `saved:${d.id}`, label: d.name })), ...DECKS];

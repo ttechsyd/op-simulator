@@ -243,11 +243,58 @@ function ArtDownload() {
   );
 }
 
-export function DeckList({ decks, onEdit, onNew, onDelete, onBack }: {
+// one deck on its own: read it, then Edit, Delete or Export
+export function DeckView({ deck, onEdit, onDelete, onBack }: { deck: Deck; onEdit: () => void; onDelete: () => void; onBack: () => void }) {
+  const [zoom, setZoom] = useState<OPCard | null>(null);
+  const [text, setText] = useState(false);
+  const leader = deck.leader ? getCard(deck.leader) : null;
+  const problems = deckProblems(deck);
+  const rows = Object.entries(deck.cards).map(([id, n]) => ({ card: getCard(id), n }));
+  rows.sort((a, b) => a.card.cardType.localeCompare(b.card.cardType) || (cost(a.card) ?? 0) - (cost(b.card) ?? 0) || a.card.name.localeCompare(b.card.name));
+  return (
+    <div className="deckview">
+      <div className="b-head">
+        <button className="ghost small" onClick={onBack}>‹ Decks</button>
+        <h2>{deck.name}</h2>
+        <span className={`b-count ${deckSize(deck) === 50 ? "ok" : ""}`}>{deckSize(deck)}/50</span>
+        <span className="b-problems">{problems[0] ?? "Deck is legal"}</span>
+        <button className="ghost small" onClick={() => setText(true)}>Export</button>
+        <button className="ghost small" onClick={() => { if (confirm(`Delete ${deck.name}?`)) onDelete(); }}>Delete</button>
+        <button className="end" onClick={onEdit}>Edit</button>
+      </div>
+      <div className="b-grid dv-grid">
+        {leader && (
+          <div className="b-card">
+            <img src={cardImage(leader.id)} alt={leader.name} draggable={false} onClick={() => setZoom(leader)} onError={(e) => retryArt(e.currentTarget)} />
+            <span className="b-n">L</span>
+          </div>
+        )}
+        {rows.map(({ card, n }) => (
+          <div key={card.id} className="b-card">
+            <img src={cardImage(card.id)} alt={card.name} draggable={false} onClick={() => setZoom(card)} onError={(e) => retryArt(e.currentTarget)} />
+            <span className="b-n">{n}</span>
+          </div>
+        ))}
+      </div>
+      {text && <DeckText deck={deck} onClose={() => setText(false)} onImport={() => "Use Edit to change this deck"} />}
+      {zoom && (
+        <div className="preview" onClick={() => setZoom(null)}>
+          <div className="pv-card" onClick={(e) => e.stopPropagation()}>
+            <img src={cardImage(zoom.id)} alt={zoom.name} draggable={false} />
+          </div>
+          <button className="pv-close" onClick={() => setZoom(null)} aria-label="close">✕</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function DeckList({ decks, onOpen, onEdit, onNew, onBack }: {
   decks: Deck[];
+  onOpen: (d: Deck) => void;
+  // an import lands straight in the builder
   onEdit: (d: Deck) => void;
   onNew: () => void;
-  onDelete: (d: Deck) => void;
   onBack: () => void;
 }) {
   const [importing, setImporting] = useState(false);
@@ -278,13 +325,13 @@ export function DeckList({ decks, onEdit, onNew, onDelete, onBack }: {
           const leader = d.leader ? getCard(d.leader) : null;
           const problems = deckProblems(d);
           return (
-            <div key={d.id} className="dl-row" onClick={() => onEdit(d)}>
+            <div key={d.id} className="dl-row" onClick={() => onOpen(d)}>
               {leader ? <img src={cardImage(leader.id)} alt="" /> : <span className="card slot" />}
               <div>
                 <b>{d.name}</b>
                 <small>{leader?.name ?? "no leader"} · {deckSize(d)}/50{problems.length ? " · not legal yet" : ""}</small>
               </div>
-              <button className="ghost small" onClick={(e) => { e.stopPropagation(); if (confirm(`Delete ${d.name}?`)) onDelete(d); }}>Delete</button>
+              <span className="dl-go">›</span>
             </div>
           );
         })}
