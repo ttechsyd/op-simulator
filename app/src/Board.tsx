@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { MatchPhase, ProjectedCard, ProjectedPlayerState } from "@tcg/op-engine";
 import { cardImage } from "./cards";
+import { evictArt } from "./decks";
 
 // a press is a tap or the start of a drag; the game decides which, and gets the
 // group the card sits in so a tap can open the strip on it
@@ -48,7 +49,7 @@ export function CardView({
         data-id={card.instanceId ?? undefined}
         onPointerDown={press ? (e) => press(e, card, group ?? [card]) : undefined}
       >
-        <img src={cardImage(card.cardId)} alt={card.name ?? card.cardId} draggable={false} />
+        <img src={cardImage(card.cardId)} alt={card.name ?? card.cardId} draggable={false} onError={(e) => evictArt(e.currentTarget.src)} />
         {card.power !== null && card.zone !== "hand" && <span className="pow">{card.power}</span>}
       </div>
     );

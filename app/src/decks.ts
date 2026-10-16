@@ -1,5 +1,6 @@
 import { allCards, getCard, validateDeckForFormat, ONE_PIECE_PRECONSTRUCTED_DECKS } from "@tcg/op-cards";
 import type { OPCard } from "@tcg/op-types";
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { cardImage } from "./cards";
 
 export type Deck = {
@@ -88,7 +89,24 @@ export async function cachedArtCount(): Promise<number> {
   return keys.length;
 }
 
-// pulls the whole catalog's art through the service worker, a few at a time
+// the art server throttles past roughly 20 requests a second and answers with error pages,
+// so fetch natively where we can see the status and only cache real images
+async function fetchArt(url: string, cache: Cache, signal: AbortSignal) {
+  if (!Capacitor.isNativePlatform()) {
+    await fetch(url, { mode: "no-cors", signal }).catch(() => {});
+    return;
+  }
+  for (let attempt = 0; attempt < 3 && !signal.aborted; attempt++) {
+    const r = await CapacitorHttp.get({ url, responseType: "blob" }).catch(() => null);
+    if (r?.status === 200 && typeof r.data === "string" && r.data.length > 1000) {
+      const blob = await (await fetch(`data:image/jpeg;base64,${r.data}`)).blob();
+      await cache.put(url, new Response(blob, { headers: { "Content-Type": "image/jpeg" } }));
+      return;
+    }
+    await new Promise((res) => setTimeout(res, 800 * (attempt + 1)));
+  }
+}
+
 export async function downloadArt(onProgress: (done: number, total: number) => void, signal: AbortSignal) {
   const cache = await caches.open(ART_CACHE);
   const have = new Set((await cache.keys()).map((r) => r.url));
@@ -99,12 +117,16 @@ export async function downloadArt(onProgress: (done: number, total: number) => v
   let i = 0;
   const worker = async () => {
     while (i < todo.length && !signal.aborted) {
-      const url = todo[i++];
-      await fetch(url, { mode: "no-cors", signal }).catch(() => {});
+      await fetchArt(todo[i++], cache, signal);
       onProgress(++done, total);
     }
   };
-  await Promise.all(Array.from({ length: 6 }, worker));
+  await Promise.all(Array.from({ length: 12 }, worker));
+}
+
+// a face that fails to render was a throttled error page that got cached; drop it so the next look refetches
+export function evictArt(url: string) {
+  if ("caches" in window) caches.open(ART_CACHE).then((c) => c.delete(url)).catch(() => {});
 }
 
 // the plain list format other sims and deck sites use: one "4xOP10-111" per line,
