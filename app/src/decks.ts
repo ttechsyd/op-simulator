@@ -116,6 +116,7 @@ async function fetchArt(url: string, cache: Cache, signal: AbortSignal) {
 }
 
 export async function downloadArt(onProgress: (done: number, total: number) => void, signal: AbortSignal) {
+  if (!navigator.onLine) throw new Error("No connection");
   const cache = await caches.open(ART_CACHE);
   const have = new Set((await cache.keys()).map((r) => r.url));
   const todo = allArtUrls().filter((u) => !have.has(u));
@@ -144,19 +145,16 @@ export async function purgeUnverifiedArt() {
   localStorage.setItem("opsim.artPurged", "1");
 }
 
-// a face that fails to render was a throttled error page that got cached: drop it and load once more
+// every cached face is validated now, so a failed load is the network, not the cache:
+// try once more and leave the cache alone
 export function retryArt(img: HTMLImageElement) {
-  if (img.dataset.retried || !("caches" in window)) return;
+  if (img.dataset.retried) return;
   img.dataset.retried = "1";
   const url = img.src;
-  caches
-    .open(ART_CACHE)
-    .then((c) => c.delete(url))
-    .catch(() => {})
-    .then(() => {
-      img.src = "";
-      img.src = url;
-    });
+  setTimeout(() => {
+    img.src = "";
+    img.src = url;
+  }, 1500);
 }
 
 // the plain list format other sims and deck sites use: one "4xOP10-111" per line,

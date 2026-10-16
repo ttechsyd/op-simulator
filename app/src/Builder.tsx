@@ -215,6 +215,7 @@ function ArtDownload() {
   const [have, setHave] = useState(0);
   const [total, setTotal] = useState(() => allArtUrls().length);
   const [running, setRunning] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -225,7 +226,13 @@ function ArtDownload() {
   const start = () => {
     abort.current = new AbortController();
     setRunning(true);
-    downloadArt((done, all) => { setHave(done); setTotal(all); }, abort.current.signal).finally(() => setRunning(false));
+    setNote(null);
+    downloadArt((done, all) => { setHave(done); setTotal(all); }, abort.current.signal)
+      .catch((e: Error) => setNote(e.message))
+      .finally(() => {
+        setRunning(false);
+        cachedArtCount().then(setHave);
+      });
   };
   const stop = () => abort.current?.abort();
 
@@ -233,7 +240,7 @@ function ArtDownload() {
   return (
     <div className="art-dl">
       <div className="art-bar"><div style={{ width: `${pct}%` }} /></div>
-      <span>Card art offline: {have} / {total}{running ? " · downloading" : ""}</span>
+      <span>Card art offline: {have} / {total}{running ? " · downloading" : note ? ` · ${note}` : ""}</span>
       {running ? (
         <button className="ghost small" onClick={stop}>Stop</button>
       ) : (
