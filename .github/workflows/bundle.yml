@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["app/**", ".github/workflows/bundle.yml"]
+    paths: ["app/**", "scripts/**", ".github/workflows/bundle.yml"]
 
 permissions:
   contents: write
