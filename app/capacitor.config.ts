@@ -7,6 +7,13 @@ const config: CapacitorConfig = {
   android: {
     backgroundColor: "#15202b",
   },
+  plugins: {
+    CapacitorUpdater: {
+      // we drive updates ourselves from the menu
+      autoUpdate: false,
+      resetWhenUpdate: true,
+    },
+  },
 };
 
 export default config;

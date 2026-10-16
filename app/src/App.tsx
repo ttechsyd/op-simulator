@@ -18,6 +18,7 @@ import { BOT, DECKS, ME, newMatch, pendingPrompt, useMatch, type DeckId } from "
 import { cardName } from "./cards";
 import { Builder, DeckList } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, type Deck } from "./decks";
+import { appReady, applyUpdate, bundleVersion, checkForUpdate, type Release } from "./update";
 
 // ?seed=123&mine=red-aggro&theirs=st01 skips the menu, handy for replaying a hand
 const params = new URLSearchParams(location.search);
@@ -30,6 +31,13 @@ export default function App() {
   );
   const [screen, setScreen] = useState<"menu" | "decks" | Deck>("menu");
   const [saved, setSaved] = useState(loadDecks);
+  const [release, setRelease] = useState<Release | null>(null);
+  const [pct, setPct] = useState<number | null>(null);
+
+  useEffect(() => {
+    appReady();
+    checkForUpdate().then(setRelease);
+  }, []);
   // the running Game swaps in its own handler; false means "nothing to close, leave the app"
   const onBack = useRef<() => boolean>(() => false);
 
@@ -75,6 +83,22 @@ export default function App() {
         </label>
         <button onClick={() => setMatch(newMatch(mine, theirs))}>Play</button>
         <button className="ghost" onClick={() => setScreen("decks")}>Decks</button>
+        {release && (
+          <div className="update">
+            <span>
+              Card update {release.version}
+              <small>{release.cards} cards · engine {release.engine}</small>
+            </span>
+            {pct === null ? (
+              <button className="small" onClick={() => { setPct(0); applyUpdate(release, setPct).catch(() => setPct(null)); }}>
+                Update
+              </button>
+            ) : (
+              <span className="pct">{pct}%</span>
+            )}
+          </div>
+        )}
+        <small className="ver">build {bundleVersion}</small>
       </div>
     );
   }

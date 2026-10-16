@@ -1,0 +1,96 @@
+name: bundle
+
+# Pulls the latest upstream engine (which is also where new card sets come from),
+# builds the web app and publishes it as a release the phone can download.
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/bundle.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: pull upstream engine
+        run: |
+          git -C tcg-engines fetch origin main
+          git -C tcg-engines checkout --quiet origin/main
+          git -C tcg-engines rev-parse --short HEAD > engine.sha
+          if [ "${{ github.event_name }}" != "push" ] && ! git diff --quiet -- tcg-engines; then
+            git config user.name github-actions
+            git config user.email github-actions@github.com
+            git add tcg-engines
+            git commit -m "bump tcg-engines to $(cat engine.sha)"
+            git push
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: enable pnpm
+        run: corepack enable
+
+      - name: engine deps
+        run: |
+          cd tcg-engines/submodules/agnostic-simulator
+          pnpm install --frozen-lockfile --filter @tcg/bot-core --filter @tcg/engine-core --filter @tcg/protocol
+          cd ../one-piece
+          pnpm install --frozen-lockfile
+        env:
+          CI: "true"
+
+      - name: build engine
+        run: cd tcg-engines/submodules/one-piece && pnpm exec turbo run build
+
+      - name: version
+        id: v
+        run: |
+          echo "version=$(date -u +%Y.%m.%d).${{ github.run_number }}-$(cat engine.sha)" >> "$GITHUB_OUTPUT"
+          echo "engine=$(cat engine.sha)" >> "$GITHUB_OUTPUT"
+
+      - name: build app
+        run: |
+          cd app
+          pnpm install --frozen-lockfile
+          pnpm build
+        env:
+          BUNDLE_VERSION: ${{ steps.v.outputs.version }}
+
+      - name: count cards
+        id: cards
+        run: |
+          cd app
+          echo "cards=$(node --input-type=module -e "import { allCards } from '@tcg/op-cards'; console.log(allCards.length)")" >> "$GITHUB_OUTPUT"
+
+      - name: pack
+        run: |
+          cd app/dist && zip -qr ../../bundle.zip .
+          cd ../..
+          cat > version.json <<EOF
+          {
+            "version": "${{ steps.v.outputs.version }}",
+            "engine": "${{ steps.v.outputs.engine }}",
+            "cards": ${{ steps.cards.outputs.cards }},
+            "url": "https://github.com/${{ github.repository }}/releases/download/bundle-${{ steps.v.outputs.version }}/bundle.zip"
+          }
+          EOF
+          cat version.json
+
+      - name: release
+        run: |
+          gh release create "bundle-${{ steps.v.outputs.version }}" bundle.zip version.json \
+            --title "Bundle ${{ steps.v.outputs.version }}" \
+            --notes "Engine ${{ steps.v.outputs.engine }}, ${{ steps.cards.outputs.cards }} cards."
+        env:
+          GH_TOKEN: ${{ github.token }}
