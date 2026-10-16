@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { getCard } from "@tcg/op-cards";
 import type { MatchPhase, ProjectedCard, ProjectedPlayerState } from "@tcg/op-engine";
-import { cardCounter, cardImage } from "./cards";
+import { cardImage } from "./cards";
 import { retryArt } from "./decks";
 
 // a press is a tap or the start of a drag; the game decides which, and gets the
@@ -36,7 +36,7 @@ export function CardView({
   drop,
   label,
   style,
-  badge,
+  marks,
 }: {
   card: ProjectedCard | null;
   group?: ProjectedCard[];
@@ -50,8 +50,8 @@ export function CardView({
   // what an empty slot says about itself
   label?: string;
   style?: CSSProperties;
-  // a corner note like the counter value during a counter step
-  badge?: string;
+  // what the card can do right now, stacked in its corner: ATK, SKILL, +2000...
+  marks?: string[];
 }) {
   const dc = dropClass(dropKey, drop);
   if (!card)
@@ -75,7 +75,11 @@ export function CardView({
       >
         <img src={cardImage(card.cardId)} alt={card.name ?? card.cardId} draggable={false} onError={(e) => retryArt(e.currentTarget)} />
         {card.power !== null && card.zone !== "hand" && <span className={`pow ${buffed ? "up" : ""}`}>{card.power}</span>}
-        {badge && <span className="badge">{badge}</span>}
+        {marks && marks.length > 0 && (
+          <span className="marks">
+            {marks.map((m) => <b key={m}>{m}</b>)}
+          </span>
+        )}
       </div>
     );
   if (!card.attachedDon) return face;
@@ -160,6 +164,7 @@ export function Seat({
   drop,
   litIds,
   onIds,
+  marks,
   corner,
   actions,
   onDeck,
@@ -173,6 +178,7 @@ export function Seat({
   drop?: Drop;
   litIds?: Set<string>;
   onIds?: Set<string>;
+  marks?: Map<string, string[]>;
   // whatever lives in the mat's spare cell: phases and End turn on mine, name and log on theirs
   corner?: ReactNode;
   // End turn and friends, on the bottom row beside the cost area
@@ -185,6 +191,7 @@ export function Seat({
 }) {
   const lit = (c: ProjectedCard | null) => !!c?.instanceId && !!litIds?.has(c.instanceId);
   const on = (c: ProjectedCard | null) => !!c?.instanceId && !!onIds?.has(c.instanceId);
+  const marksOf = (c: ProjectedCard | null) => (c?.instanceId ? marks?.get(c.instanceId) : undefined);
   // the leader flinches when a life card is taken
   const [hit, setHit] = useState(false);
   const lastLife = useRef(p.lifeCount);
@@ -215,6 +222,7 @@ export function Seat({
             press={press}
             lit={lit(c)}
             on={on(c)}
+            marks={marksOf(c)}
             dropKey={key(c, opponent ? undefined : `slot:${i}`)}
             drop={drop}
           />
@@ -223,9 +231,9 @@ export function Seat({
 
       <div className="z-lead">
         <div className={hit ? "hit" : ""}>
-          <CardView card={p.leader} group={field} press={press} lit={lit(p.leader)} on={on(p.leader)} dropKey={key(p.leader)} drop={drop} />
+          <CardView card={p.leader} group={field} press={press} lit={lit(p.leader)} on={on(p.leader)} marks={marksOf(p.leader)} dropKey={key(p.leader)} drop={drop} />
         </div>
-        <CardView card={p.stage} group={field} press={press} lit={lit(p.stage)} on={on(p.stage)} dropKey={opponent ? undefined : "stage"} drop={drop} label="Stage" />
+        <CardView card={p.stage} group={field} press={press} lit={lit(p.stage)} on={on(p.stage)} marks={marksOf(p.stage)} dropKey={opponent ? undefined : "stage"} drop={drop} label="Stage" />
       </div>
 
       <div className="z-piles">
@@ -278,7 +286,7 @@ export function Hand({
   litIds,
   onIds,
   dim,
-  counters,
+  marks,
   pos,
   onLift,
 }: {
@@ -288,8 +296,7 @@ export function Hand({
   onIds?: Set<string>;
   // a counter or blocker step greys out the cards that can't answer it
   dim?: boolean;
-  // and the counter step writes each usable card's counter value on it
-  counters?: boolean;
+  marks?: Map<string, string[]>;
   pos: "" | "up" | "half" | "tuck";
   onLift: (up: boolean | "toggle") => void;
 }) {
@@ -314,7 +321,7 @@ export function Hand({
             lit={lit}
             on={!!c.instanceId && !!onIds?.has(c.instanceId)}
             dim={dim && !lit}
-            badge={counters && lit && c.cardId ? `+${cardCounter(c.cardId) ?? 0}` : undefined}
+            marks={c.instanceId ? marks?.get(c.instanceId) : undefined}
             style={{ marginLeft: i ? step - 80 : 0, transform: `rotate(${off * 3}deg) translateY(${Math.abs(off) * 3}px)` }}
           />
         );

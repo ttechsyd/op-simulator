@@ -19,7 +19,7 @@ import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "
 import { BOT, DECKS, ME, localTable, newMatch, pendingPrompt, seatToShow, sitAt, useMatch, type DeckId, type Mode, type Table } from "./match";
 import { Lobby } from "./Lobby";
 import { forgetRoom } from "./net";
-import { cardImage, cardName, timingName } from "./cards";
+import { cardCounter, cardImage, cardName, timingName } from "./cards";
 import { Builder, DeckList, DeckView } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from "./decks";
 import { appReady, applyUpdate, bundleVersion, checkForUpdate, installApk, type Check } from "./update";
@@ -343,6 +343,20 @@ function Game({
     for (const a of potential) if (a.enabled && a.sourceId) s.add(a.sourceId);
     return s;
   }, [potential]);
+  // every card wears what it can do right now, so nothing has to be tapped to find out
+  const marks = useMemo(() => {
+    const m = new Map<string, string[]>();
+    const add = (id: string, mark: string) => m.set(id, [...(m.get(id) ?? []), mark]);
+    for (const a of potential) {
+      if (!a.enabled || !a.sourceId) continue;
+      if (a.type === "playCard") add(a.sourceId, "PLAY");
+      else if (a.type === "declareAttack" && a.targetIds?.length) add(a.sourceId, "ATK");
+      else if (a.type === "activateEffect") add(a.sourceId, "SKILL");
+    }
+    if (battleStep === "block") for (const id of stepIds) add(id, "BLOCK");
+    if (battleStep === "counter") for (const id of stepIds) add(id, `+${cardCounter(state.cards[id].cardId) ?? 0}`);
+    return m;
+  }, [potential, battleStep, stepIds, state]);
 
   const battle = state.battle;
   // the engine only folds counters into defensePower when it compares, so add them while the step runs
@@ -466,6 +480,7 @@ function Game({
           drop={drop}
           litIds={new Set([...battleIds, ...canAct, ...stepIds, ...pickIds])}
           onIds={new Set(picked)}
+          marks={marks}
           onDeck={step === "draw" ? draw : undefined}
           onDon={step === "don" ? takeDon : undefined}
           deckSplit={
@@ -499,7 +514,7 @@ function Game({
           litIds={battleStep ? stepIds : tray === "pick" ? pickIds : canAct}
           onIds={new Set(picked)}
           dim={!!battleStep}
-          counters={battleStep === "counter"}
+          marks={marks}
           pos={handPos}
           onLift={(v) => setHandUp((cur) => (v === "toggle" ? !cur : v))}
         />
