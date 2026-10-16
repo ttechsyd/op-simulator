@@ -99,8 +99,9 @@ async function fetchArt(url: string, cache: Cache, signal: AbortSignal) {
   for (let attempt = 0; attempt < 3 && !signal.aborted; attempt++) {
     const r = await CapacitorHttp.get({ url, responseType: "blob" }).catch(() => null);
     if (r?.status === 200 && typeof r.data === "string" && r.data.length > 1000) {
-      const blob = await (await fetch(`data:image/jpeg;base64,${r.data}`)).blob();
-      await cache.put(url, new Response(blob, { headers: { "Content-Type": "image/jpeg" } }));
+      const type = url.endsWith(".png") ? "image/png" : "image/jpeg";
+      const blob = await (await fetch(`data:${type};base64,${r.data}`)).blob();
+      await cache.put(url, new Response(blob, { headers: { "Content-Type": type } }));
       return;
     }
     await new Promise((res) => setTimeout(res, 800 * (attempt + 1)));
@@ -124,9 +125,19 @@ export async function downloadArt(onProgress: (done: number, total: number) => v
   await Promise.all(Array.from({ length: 12 }, worker));
 }
 
-// a face that fails to render was a throttled error page that got cached; drop it so the next look refetches
-export function evictArt(url: string) {
-  if ("caches" in window) caches.open(ART_CACHE).then((c) => c.delete(url)).catch(() => {});
+// a face that fails to render was a throttled error page that got cached: drop it and load once more
+export function retryArt(img: HTMLImageElement) {
+  if (img.dataset.retried || !("caches" in window)) return;
+  img.dataset.retried = "1";
+  const url = img.src;
+  caches
+    .open(ART_CACHE)
+    .then((c) => c.delete(url))
+    .catch(() => {})
+    .then(() => {
+      img.src = "";
+      img.src = url;
+    });
 }
 
 // the plain list format other sims and deck sites use: one "4xOP10-111" per line,

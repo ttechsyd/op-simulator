@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { OPCard } from "@tcg/op-types";
 import { getCard } from "@tcg/op-cards";
 import { cardImage } from "./cards";
-import { allArtUrls, cachedArtCount, colorsOf, deckToText, evictArt, newDeck, parseDeckText, deckProblems, deckSize, downloadArt, leaders, mainCards, prefetchImages, saveDeck, type Deck } from "./decks";
+import { allArtUrls, cachedArtCount, colorsOf, deckToText, retryArt, newDeck, parseDeckText, deckProblems, deckSize, downloadArt, leaders, mainCards, prefetchImages, saveDeck, type Deck } from "./decks";
 
 const COLORS = ["red", "green", "blue", "purple", "black", "yellow"] as const;
 const TYPES = ["character", "event", "stage"] as const;
@@ -158,7 +158,7 @@ export function Builder({ initial, onDone }: { initial: Deck; onDone: () => void
             const n = deck.cards[c.id] ?? 0;
             return (
               <div key={c.id} className={`b-card ${n ? "in" : ""}`}>
-                <img src={cardImage(c.id)} alt={c.name} loading="lazy" draggable={false} onClick={() => setZoom(c)} onError={(e) => evictArt(e.currentTarget.src)} />
+                <img src={cardImage(c.id)} alt={c.name} loading="lazy" draggable={false} onClick={() => setZoom(c)} onError={(e) => retryArt(e.currentTarget)} />
                 {picking === "leader" ? (
                   <button className="b-add" onClick={() => { setDeck({ ...deck, leader: c.id }); setPicking("cards"); }}>Use</button>
                 ) : (
