@@ -87,10 +87,29 @@ jobs:
           EOF
           cat version.json
 
+      # the apk is for native changes, which the in-app update can't carry
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: apk
+        run: |
+          cd app
+          echo "$KS_B64" | base64 -d > android/opsim.keystore
+          printf 'storeFile=opsim.keystore\nstorePassword=%s\nkeyAlias=opsim\nkeyPassword=%s\n' "$KS_PW" "$KS_PW" > android/keystore.properties
+          npx cap sync android
+          cd android && chmod +x gradlew && ./gradlew assembleRelease -q
+          cp app/build/outputs/apk/release/app-release.apk ../../opsim.apk
+        env:
+          KS_B64: ${{ secrets.OPSIM_KEYSTORE_B64 }}
+          KS_PW: ${{ secrets.OPSIM_KEYSTORE_PASSWORD }}
+          BUNDLE_VERSION: ${{ steps.v.outputs.version }}
+
       - name: release
         run: |
-          gh release create "bundle-${{ steps.v.outputs.version }}" bundle.zip version.json \
+          gh release create "bundle-${{ steps.v.outputs.version }}" bundle.zip version.json opsim.apk \
             --title "Bundle ${{ steps.v.outputs.version }}" \
-            --notes "Engine ${{ steps.v.outputs.engine }}, ${{ steps.cards.outputs.cards }} cards."
+            --notes "Engine ${{ steps.v.outputs.engine }}, ${{ steps.cards.outputs.cards }} cards. opsim.apk is the whole app, for when the in-app update isn't enough."
         env:
           GH_TOKEN: ${{ github.token }}
