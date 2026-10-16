@@ -35,11 +35,18 @@ const faceDown = (zone: CardZone) => zone === "deck" || zone === "life" || zone 
 // arrived fly in from the pile they left, flipping face up on the way; cards that left
 // fly out to the pile they went to. Things that are never drawn with an id, the far
 // side's hand and the DON!!, are animated from the counts instead.
-export function useCardMotion(state: MatchState) {
+export function useCardMotion(state: MatchState, seat: MatchSeat) {
   const last = useRef(new Map<string, DOMRect>());
   const before = useRef<MatchState | null>(null);
+  const sat = useRef(seat);
 
   useLayoutEffect(() => {
+    // the table just turned around: nothing moved, it's all drawn from the other chair
+    if (sat.current !== seat) {
+      sat.current = seat;
+      last.current.clear();
+      before.current = null;
+    }
     const prev = last.current;
     const was = before.current;
     before.current = state;

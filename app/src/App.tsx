@@ -4,6 +4,7 @@ import {
   getLegalCommands,
   getPotentialCardCommands,
   projectStateForSeat,
+  type MatchSeat,
   type MatchState,
   type ProjectedCard,
 } from "@tcg/op-engine";
@@ -15,7 +16,7 @@ import { Log } from "./Log";
 import { BattleArrow, useCardMotion } from "./anim";
 import { useManualTurnStart } from "./turnStart";
 import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "./drag";
-import { BOT, DECKS, ME, newMatch, pendingPrompt, useMatch, type DeckId } from "./match";
+import { BOT, DECKS, ME, newMatch, pendingPrompt, seatToShow, sitAt, useMatch, type DeckId, type Mode } from "./match";
 import { cardName } from "./cards";
 import { Builder, DeckList, DeckView } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from "./decks";
@@ -27,8 +28,9 @@ const params = new URLSearchParams(location.search);
 export default function App() {
   const [mine, setMine] = useState<DeckId>(params.get("mine") ?? "pre:ST01");
   const [theirs, setTheirs] = useState<DeckId>(params.get("theirs") ?? "red-aggro");
+  const [mode, setMode] = useState<Mode>(params.get("mode") === "self" ? "self" : "bot");
   const [match, setMatch] = useState<MatchState | null>(() =>
-    params.has("seed") ? newMatch(mine, theirs, Number(params.get("seed"))) : null,
+    params.has("seed") ? newMatch(mine, theirs, mode, Number(params.get("seed"))) : null,
   );
   const [screen, setScreen] = useState<"menu" | "decks" | { view: Deck } | { edit: Deck }>("menu");
   const [saved, setSaved] = useState(loadDecks);
@@ -91,18 +93,25 @@ export default function App() {
       <div className="menu">
         <h1>OP Sim</h1>
         <label>
-          Your deck
+          Mode
+          <select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+            <option value="bot">Against the bot</option>
+            <option value="self">Solo, both sides</option>
+          </select>
+        </label>
+        <label>
+          {mode === "self" ? "Player 1 deck" : "Your deck"}
           <select value={mine} onChange={(e) => setMine(e.target.value as DeckId)}>
             {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
           </select>
         </label>
         <label>
-          Bot deck
+          {mode === "self" ? "Player 2 deck" : "Bot deck"}
           <select value={theirs} onChange={(e) => setTheirs(e.target.value as DeckId)}>
             {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
           </select>
         </label>
-        <button onClick={() => setMatch(newMatch(mine, theirs))}>Play</button>
+        <button onClick={() => setMatch(newMatch(mine, theirs, mode))}>Play</button>
         <button className="ghost" onClick={() => setScreen("decks")}>Decks</button>
         {release && (
           <div className="update">
@@ -178,25 +187,32 @@ export default function App() {
       </div>
     );
   }
-  return <Game initial={match} onQuit={() => setMatch(null)} onBack={onBack} />;
+  return <Game initial={match} mode={mode} onQuit={() => setMatch(null)} onBack={onBack} />;
 }
 
 function Game({
   initial,
+  mode,
   onQuit,
   onBack,
 }: {
   initial: MatchState;
+  mode: Mode;
   onQuit: () => void;
   onBack: MutableRefObject<() => boolean>;
 }) {
-  const { state: real, send, error, undo } = useMatch(initial);
+  const { state: real, send, error, undo } = useMatch(initial, mode);
+  // playing both sides, the table turns to face whoever is up, behind a "pass the phone" screen
+  const seat = mode === "self" ? seatToShow(real) : "south";
+  sitAt(seat);
+  const [turned, setTurned] = useState<{ seat: MatchSeat; pass: MatchSeat | null }>({ seat, pass: null });
+  if (turned.seat !== seat) setTurned({ seat, pass: mode === "self" && real.status === "active" ? seat : null });
   // draw and DON!! wait for a tap; the engine has already done them underneath
   const { state, step, donLeft, draw, takeDon } = useManualTurnStart(real);
   const [preview, setPreview] = useState<{ group: ProjectedCard[]; start: number } | null>(null);
   const [layout, setLayout] = useState<Layout>([null, null, null, null, null]);
   const [showLog, setShowLog] = useState(false);
-  useCardMotion(state);
+  useCardMotion(state, seat);
 
   const view = useMemo(() => projectStateForSeat(state, ME), [state]);
   const prompt = pendingPrompt(state);
@@ -476,6 +492,12 @@ function Game({
           send={send}
           onClose={() => setPreview(null)}
         />
+      )}
+      {turned.pass && (
+        <div className="pass" onClick={() => setTurned({ seat, pass: null })}>
+          <h2>{real.players[turned.pass].playerName}</h2>
+          <p>Pass the phone, then tap</p>
+        </div>
       )}
       {state.status === "finished" && <GameOver state={state} onQuit={onQuit} />}
       {error && <div className="toast">{error}</div>}

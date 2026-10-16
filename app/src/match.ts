@@ -17,8 +17,17 @@ import {
 
 import { loadDecks, mainDeckList, preconDecks } from "./decks";
 
-export const ME: MatchSeat = "south";
-export const BOT: MatchSeat = "north";
+// which seat the screen belongs to. Against the bot it's always south; playing both
+// sides from one phone it follows whoever has to act, so everything that reads these
+// sees the table from the right chair
+export let ME: MatchSeat = "south";
+export let BOT: MatchSeat = "north";
+export function sitAt(seat: MatchSeat) {
+  ME = seat;
+  BOT = seat === "south" ? "north" : "south";
+}
+
+export type Mode = "bot" | "self";
 
 // "saved:<id>" is one of the user's decks, "pre:<code>" an official starter, the rest are the engine's test decks
 export type DeckId = string;
@@ -45,18 +54,29 @@ function playerConfig(deck: DeckId, playerName: string): MatchPlayerConfig {
   return createSt01PlayerConfig(playerName);
 }
 
-export function newMatch(mine: DeckId, theirs: DeckId, seed = Date.now()): MatchState {
+export function newMatch(mine: DeckId, theirs: DeckId, mode: Mode, seed = Date.now()): MatchState {
+  const names = mode === "self" ? ["Player 1", "Player 2"] : ["You", "Bot"];
   return createMatch({
-    firstPlayer: ME,
+    firstPlayer: "south",
     seed,
     shuffleDecks: true,
     skipFirstTurnDraw: true,
-    players: { south: playerConfig(mine, "You"), north: playerConfig(theirs, "Bot") },
+    players: { south: playerConfig(mine, names[0]), north: playerConfig(theirs, names[1]) },
   });
 }
 
 export function pendingPrompt(state: MatchState) {
   return state.promptQueue.find((p) => p.status === "pending") ?? null;
+}
+
+// playing both sides: the chair that has something to do right now
+export function seatToShow(state: MatchState): MatchSeat {
+  const prompt = pendingPrompt(state);
+  if (prompt && prompt.seat !== "judge") return prompt.seat;
+  if (state.status === "setup") {
+    for (const s of ["south", "north"] as const) if (getLegalCommands(state, s).some((c) => setupTypes.has(c.type))) return s;
+  }
+  return state.activeSeat ?? "south";
 }
 
 // The table is the client's only view of the game: whatever sits on the other
@@ -73,7 +93,7 @@ export type Table = {
 
 export type TableEvent = { kind: "changed" } | { kind: "rejected"; reason: string };
 
-export function localTable(initial: MatchState): Table {
+export function localTable(initial: MatchState, mode: Mode): Table {
   let state = initial;
   // DON attachments can be taken back until anything else happens, like asking
   // your opponent "wait, I meant the other one"
@@ -107,7 +127,7 @@ export function localTable(initial: MatchState): Table {
 
   const wakeBot = () => {
     clearTimeout(botTimer);
-    const cmd = botCommand(state);
+    const cmd = botCommand(state, mode);
     if (!cmd) return;
     botTimer = setTimeout(() => send(cmd), state.status === "setup" ? 250 : 550);
   };
@@ -136,13 +156,15 @@ export function localTable(initial: MatchState): Table {
 const rng = { random: Math.random };
 const setupTypes = new Set(["chooseJoKenPo", "chooseFirstPlayer", "mulligan", "keepHand", "startGame"]);
 
-function botCommand(state: MatchState): EngineCommand | null {
+function botCommand(state: MatchState, mode: Mode): EngineCommand | null {
   const prompt = pendingPrompt(state);
   if (prompt) {
-    if (prompt.seat === ME) return null;
+    // rules questions the engine asks of nobody in particular get answered either way
     if (prompt.kind === "judge") return resolveBotPromptCommand(state, prompt);
+    if (mode === "self" || prompt.seat === ME) return null;
     return heuristicAgent.resolvePrompt?.(state, prompt, rng) ?? resolveBotPromptCommand(state, prompt);
   }
+  if (mode === "self") return null;
   if (state.status === "setup") {
     const cmd = passOnlyStrategy(state, BOT, getLegalCommands(state, BOT));
     return cmd && setupTypes.has(cmd.type) ? cmd : null;
@@ -156,10 +178,10 @@ function botCommand(state: MatchState): EngineCommand | null {
   return null;
 }
 
-export function useMatch(initial: MatchState) {
+export function useMatch(initial: MatchState, mode: Mode) {
   // TODO: pick a remote table here once there's a server to talk to; the rest of
   // the hook and everything in App.tsx shouldn't need to know which it got
-  const [table] = useState(() => localTable(initial));
+  const [table] = useState(() => localTable(initial, mode));
   const [state, setState] = useState(table.state);
   const [undo, setUndo] = useState(() => table.undo ?? null);
   const [error, setError] = useState<string | null>(null);

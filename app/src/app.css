@@ -329,6 +329,13 @@ button small { display: block; font-size: 10px; color: var(--muted); }
   position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
   color: var(--muted); font-size: 14px;
 }
+.pass {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: var(--bg); color: var(--ink);
+}
+.pass h2 { margin: 0; font-size: 28px; letter-spacing: 1px; }
+.pass p { margin: 0; color: var(--muted); }
 .toast {
   position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
   background: #5b2020; color: #ffd9d9; padding: 8px 14px; border-radius: 8px;
