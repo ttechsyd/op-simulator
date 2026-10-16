@@ -25,11 +25,13 @@ export function useCardMotion(state: MatchState) {
     const origin = (id: string) => {
       const c = state.cards[id];
       if (!c) return null;
-      if (c.zone === "hand") return rectOf(fromLife ? ".seat.me .z-life" : ".seat.me .pile.deck");
-      if (c.owner === BOT) return rectOf(".seat.opp .z-corner");
+      if (c.zone === "hand") return rectOf(fromLife ? ".mat.me .z-life" : ".mat.me .pile.deck");
+      if (c.owner === BOT) return rectOf(".opp-hand");
       return null;
     };
 
+    // the table is scaled as a whole, so screen distances shrink before they become transforms
+    const k = (document.querySelector(".stage")?.getBoundingClientRect().width ?? 960) / 960;
     for (const el of document.querySelectorAll<HTMLElement>("[data-id]")) {
       const id = el.dataset.id!;
       const r = el.getBoundingClientRect();
@@ -37,8 +39,8 @@ export function useCardMotion(state: MatchState) {
       if (prev.size === 0) continue;
       const from = prev.get(id) ?? origin(id);
       if (!from || r.width === 0) continue;
-      const dx = from.left - r.left;
-      const dy = from.top - r.top;
+      const dx = (from.left - r.left) / k;
+      const dy = (from.top - r.top) / k;
       const s = from.width / r.width;
       if (Math.abs(dx) < 3 && Math.abs(dy) < 3 && Math.abs(s - 1) < 0.05) continue;
       el.animate(
@@ -79,11 +81,11 @@ export function BattleArrow({ battle }: { battle: BattleState | null }) {
   return (
     <svg className="drag-arrow battle-arrow" width="100%" height="100%">
       <defs>
-        <marker id="bhead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 z" fill="#ff5252" />
+        <marker id="bhead" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+          <circle cx="5" cy="5" r="3.5" fill="#f6a06b" stroke="#8c491a" strokeWidth="1.5" />
         </marker>
       </defs>
-      <line x1={line[0]} y1={line[1]} x2={line[2]} y2={line[3]} stroke="#ff5252" strokeWidth="3" strokeLinecap="round" markerEnd="url(#bhead)" />
+      <line x1={line[0]} y1={line[1]} x2={line[2]} y2={line[3]} stroke="#f6a06b" strokeWidth="4" strokeLinecap="round" markerEnd="url(#bhead)" />
     </svg>
   );
 }

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { getCard } from "@tcg/op-cards";
 import type { MatchPhase, ProjectedCard, ProjectedPlayerState } from "@tcg/op-engine";
 import { cardImage } from "./cards";
 import { retryArt } from "./decks";
@@ -19,38 +20,55 @@ function dropClass(key: string | undefined, drop?: Drop) {
   return "";
 }
 
+function printedPower(cardId: string) {
+  const c = getCard(cardId);
+  return "power" in c && typeof c.power === "number" ? c.power : null;
+}
+
 export function CardView({
   card,
   group,
   press,
   lit,
-  size = "field",
+  dim,
   dropKey,
   drop,
+  label,
+  style,
 }: {
   card: ProjectedCard | null;
   group?: ProjectedCard[];
   press?: Press;
   lit?: boolean;
-  size?: "field" | "inhand";
+  dim?: boolean;
   dropKey?: string;
   drop?: Drop;
+  // what an empty slot says about itself
+  label?: string;
+  style?: CSSProperties;
 }) {
   const dc = dropClass(dropKey, drop);
-  if (!card) return <div className={`card slot ${size} ${dc}`} data-drop={dropKey} />;
-  const cls = ["card", size, card.rested ? "rested" : "", lit ? "lit" : "", dc].join(" ");
+  if (!card)
+    return (
+      <div className={`card slot ${dc}`} data-drop={dropKey}>
+        {label && <span className="zlabel">{label}</span>}
+      </div>
+    );
+  const cls = ["card", card.rested ? "rested" : "", lit ? "lit" : "", dim ? "dim" : "", dc].join(" ");
+  const buffed = card.power !== null && card.zone !== "hand" && !!card.cardId && card.power !== printedPower(card.cardId);
   const face =
     card.hidden || !card.cardId ? (
-      <div className={`${cls} back`} data-id={card.instanceId ?? undefined} />
+      <div className={`${cls} back`} data-id={card.instanceId ?? undefined} style={style} />
     ) : (
       <div
         className={cls}
         data-drop={dropKey}
         data-id={card.instanceId ?? undefined}
+        style={style}
         onPointerDown={press ? (e) => press(e, card, group ?? [card]) : undefined}
       >
         <img src={cardImage(card.cardId)} alt={card.name ?? card.cardId} draggable={false} onError={(e) => retryArt(e.currentTarget)} />
-        {card.power !== null && card.zone !== "hand" && <span className="pow">{card.power}</span>}
+        {card.power !== null && card.zone !== "hand" && <span className={`pow ${buffed ? "up" : ""}`}>{card.power}</span>}
       </div>
     );
   if (!card.attachedDon) return face;
@@ -73,23 +91,25 @@ function Don({ rested, press }: { rested?: boolean; press?: (e: ReactPointerEven
 function Life({ cards, press }: { cards: ProjectedCard[]; press?: Press }) {
   const up = cards.filter((c) => !c.hidden);
   return (
-    <div className="life" style={{ height: 16 + Math.max(cards.length - 1, 0) * 7 }}>
-      {cards.map((c, i) => (
-        c.hidden ? (
-          <div key={i} className="life-card" style={{ top: i * 7, zIndex: cards.length - i }} />
-        ) : (
-          <div
-            key={c.instanceId ?? i}
-            className="life-card up"
-            style={{ top: i * 7, zIndex: cards.length - i }}
-            data-id={c.instanceId ?? undefined}
-            onPointerDown={press ? (e) => press(e, c, up) : undefined}
-          >
-            <img src={cardImage(c.cardId!)} alt="" draggable={false} />
-          </div>
-        )
-      ))}
-      <span className="count">{cards.length}</span>
+    <div className="life">
+      <div className="life-stack">
+        {cards.map((c, i) =>
+          c.hidden ? (
+            <div key={i} className="life-card" style={{ zIndex: cards.length - i }} />
+          ) : (
+            <div
+              key={c.instanceId ?? i}
+              className="life-card up"
+              style={{ zIndex: cards.length - i }}
+              data-id={c.instanceId ?? undefined}
+              onPointerDown={press ? (e) => press(e, c, up) : undefined}
+            >
+              <img src={cardImage(c.cardId!)} alt="" draggable={false} />
+            </div>
+          ),
+        )}
+      </div>
+      <span className="zlabel">Life {cards.length}</span>
     </div>
   );
 }
@@ -102,7 +122,7 @@ const PHASES: { id: MatchPhase; label: string }[] = [
   { id: "end", label: "End" },
 ];
 
-function Phases({ current }: { current: MatchPhase | null }) {
+export function Phases({ current }: { current: MatchPhase | null }) {
   return (
     <div className="phases">
       {PHASES.map((p) => (
@@ -114,25 +134,38 @@ function Phases({ current }: { current: MatchPhase | null }) {
   );
 }
 
+// the far side's hand, face down, peeking over the top edge of the table
+export function OppHand({ count }: { count: number }) {
+  return (
+    <div className="opp-hand">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="card back" style={{ transform: `rotate(${(i - (count - 1) / 2) * -3}deg)` }} />
+      ))}
+    </div>
+  );
+}
+
 export function Seat({
   p,
   opponent,
-  phase,
   press,
   pressDon,
   drop,
   litIds,
   corner,
+  actions,
   deckSplit,
 }: {
   p: ProjectedPlayerState;
   opponent?: boolean;
-  phase: MatchPhase | null;
   press?: Press;
   pressDon?: (e: ReactPointerEvent) => void;
   drop?: Drop;
   litIds?: Set<string>;
+  // whatever lives in the mat's spare cell: phases and End turn on mine, name and log on theirs
   corner?: ReactNode;
+  // End turn and friends, on the bottom row beside the cost area
+  actions?: ReactNode;
   // a "top or bottom of the deck" prompt is answered by dropping or tapping on half the pile
   deckSplit?: (half: "top" | "bottom") => void;
 }) {
@@ -153,7 +186,7 @@ export function Seat({
   const key = (c: ProjectedCard | null, empty?: string) => (c?.instanceId ? `${own}:${c.instanceId}` : empty);
   const trashTop = p.trash[p.trash.length - 1] ?? null;
   return (
-    <div className={`seat ${opponent ? "opp" : "me"}`} data-drop={opponent ? undefined : "side"}>
+    <div className={`mat ${opponent ? "opp" : "me"}`} data-drop={opponent ? undefined : "side"}>
       <div className={`z-life ${opponent ? "" : dropClass("life", drop)}`} data-drop={opponent ? undefined : "life"}>
         <Life cards={p.life} press={press} />
       </div>
@@ -173,11 +206,10 @@ export function Seat({
       </div>
 
       <div className="z-lead">
-        <Phases current={phase} />
         <div className={hit ? "hit" : ""}>
           <CardView card={p.leader} group={field} press={press} lit={lit(p.leader)} dropKey={key(p.leader)} drop={drop} />
         </div>
-        <CardView card={p.stage} group={field} press={press} dropKey={opponent ? undefined : "stage"} drop={drop} />
+        <CardView card={p.stage} group={field} press={press} dropKey={opponent ? undefined : "stage"} drop={drop} label="Stage" />
       </div>
 
       <div className="z-piles">
@@ -197,44 +229,69 @@ export function Seat({
             ))}
         </div>
         <div className={`pile trash ${opponent ? "" : dropClass("trash", drop)}`} data-drop={opponent ? undefined : "trash"}>
-          <CardView card={trashTop} group={p.trash} press={press} />
+          <CardView card={trashTop} group={p.trash} press={press} label="Trash" />
           {p.trash.length > 0 && <span className="count">{p.trash.length}</span>}
         </div>
       </div>
 
-      <div className="z-dondeck pile">
+      <div className="z-dondeck">
         <Don />
-        <span className="count">{p.donDeckCount}</span>
+        <span className="don-count">{p.donDeckCount}</span>
       </div>
 
       <div className="z-cost">
         {Array.from({ length: p.activeDon }, (_, i) => <Don key={`a${i}`} press={pressDon} />)}
         {Array.from({ length: p.restedDon }, (_, i) => <Don key={`r${i}`} rested />)}
+        <span className="zlabel">{opponent ? "Cost area" : `Cost area · ${p.activeDon} active`}</span>
       </div>
 
-      <div className="z-corner">
-        <div className="who">
-          <b>{p.playerName}</b> · {p.handCount} in hand
-        </div>
-        {corner}
-      </div>
+      <div className="z-corner">{corner}</div>
+      {actions && <div className="z-act">{actions}</div>}
     </div>
   );
 }
 
-export function Hand({ cards, press, litIds }: { cards: ProjectedCard[]; press: Press; litIds?: Set<string> }) {
+// fanned along the bottom edge with only the tops showing; lifts to read, or tap the felt beside it
+export function Hand({
+  cards,
+  press,
+  litIds,
+  dim,
+  pos,
+  onLift,
+}: {
+  cards: ProjectedCard[];
+  press: Press;
+  litIds?: Set<string>;
+  // a counter or blocker step greys out the cards that can't answer it
+  dim?: boolean;
+  pos: "" | "up" | "half" | "tuck";
+  onLift: (up: boolean | "toggle") => void;
+}) {
+  const n = cards.length;
+  const step = Math.min(60, n > 1 ? (900 - 80) / (n - 1) : 60);
   return (
-    <div className="hand">
-      {cards.map((c, i) => (
-        <CardView
-          key={c.instanceId ?? i}
-          card={c}
-          group={cards}
-          size="inhand"
-          press={press}
-          lit={!!c.instanceId && !!litIds?.has(c.instanceId)}
-        />
-      ))}
+    <div
+      className={`hand ${pos}`}
+      onClick={(e) => e.target === e.currentTarget && onLift("toggle")}
+      onPointerEnter={(e) => e.pointerType === "mouse" && onLift(true)}
+      onPointerLeave={(e) => e.pointerType === "mouse" && onLift(false)}
+    >
+      {cards.map((c, i) => {
+        const off = i - (n - 1) / 2;
+        const lit = !!c.instanceId && !!litIds?.has(c.instanceId);
+        return (
+          <CardView
+            key={c.instanceId ?? i}
+            card={c}
+            group={cards}
+            press={press}
+            lit={lit}
+            dim={dim && !lit}
+            style={{ marginLeft: i ? step - 80 : 0, transform: `rotate(${off * 3}deg) translateY(${Math.abs(off) * 3}px)` }}
+          />
+        );
+      })}
     </div>
   );
 }

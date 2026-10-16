@@ -159,13 +159,13 @@ export function DragLayer({ drag }: { drag: DragState | null }) {
       {source.kind === "attacker" && (
         <svg className="drag-arrow" width="100%" height="100%">
           <defs>
-            <marker id="head" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-              <path d="M0,0 L8,4 L0,8 z" fill={attacking ? "#ff5252" : "#ffffff88"} />
+            <marker id="head" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+              <circle cx="5" cy="5" r="3.5" fill={attacking ? "#f6a06b" : "#ffffff88"} stroke="#8c491a" strokeWidth={attacking ? 1.5 : 0} />
             </marker>
           </defs>
           <line
             x1={sx} y1={sy} x2={x} y2={y}
-            stroke={attacking ? "#ff5252" : "#ffffff88"}
+            stroke={attacking ? "#f6a06b" : "#ffffff88"}
             strokeWidth="4" strokeLinecap="round" markerEnd="url(#head)"
           />
         </svg>

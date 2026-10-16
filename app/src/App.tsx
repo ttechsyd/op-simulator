@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 import { App as Native } from "@capacitor/app";
 import {
   getLegalCommands,
@@ -7,7 +7,7 @@ import {
   type MatchState,
   type ProjectedCard,
 } from "@tcg/op-engine";
-import { Hand, Seat } from "./Board";
+import { Hand, OppHand, Phases, Seat } from "./Board";
 import { GameOver, PromptSheet, SetupSheet } from "./Overlays";
 import { Preview } from "./Preview";
 import { Tray, pickTargets, trayMode } from "./Tray";
@@ -313,76 +313,123 @@ function Game({
     c.owner === ME && c.instanceId ? potential.filter((a) => a.sourceId === c.instanceId) : [];
 
   const drop = drag ? { ok: drag.targets, over: drag.over } : undefined;
-  const lastLog = view.logs[view.logs.length - 1];
   const endTurn = myTurn && legal.some((c) => c.type === "endTurn");
+  const opp = view.players[BOT];
+  const logs = view.logs.slice(-4).reverse();
+
+  // the whole table is drawn at 960x430 and scaled to whatever screen it lands on
+  const tableRef = useRef<HTMLDivElement>(null);
+  const [k, setK] = useState(1);
+  useLayoutEffect(() => {
+    const el = tableRef.current!;
+    const fit = () => {
+      const cs = getComputedStyle(el);
+      const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const h = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      setK(Math.min(w / 960, h / 430));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // the hand sits under the bottom edge: lifted to read, half up when it has to answer a
+  // battle step or a pick, tucked away while something else is being dragged
+  const [handUp, setHandUp] = useState(false);
+  const handPos = drag ? "tuck" : handUp ? "up" : battleStep || tray === "pick" ? "half" : "";
+
+  const who = (id: string) => {
+    const c = state.cards[id];
+    const n = c.zone === "leader" ? "Leader" : cardName(c.cardId);
+    return c.owner === ME ? `Your ${n}` : `${opp.playerName}'s ${n}`;
+  };
+  const turnLabel =
+    state.status === "setup" ? "Setup"
+    : state.status === "finished" ? "Game over"
+    : prompt && prompt.seat !== ME ? "Waiting for opponent"
+    : state.activeSeat === ME ? "Your turn"
+    : `${opp.playerName}'s turn`;
 
   return (
-    <div className="table">
-      <Seat
-        p={view.players[BOT]}
-        opponent
-        phase={state.activeSeat === BOT && state.status === "active" ? state.phase : null}
-        press={pressCard}
-        drop={drop}
-        litIds={battleIds}
-        corner={
-          <button className="ghost small" onClick={() => { if (confirm("Concede?")) send({ type: "concede", seat: ME }); }}>
-            ✕
-          </button>
-        }
-      />
+    <div className="table" ref={tableRef} style={{ "--k": k } as CSSProperties}>
+      <div className="stage">
+        <OppHand count={opp.handCount} />
+        <Seat
+          p={opp}
+          opponent
+          press={pressCard}
+          drop={drop}
+          litIds={battleIds}
+          corner={
+            <>
+              <div className="who">
+                <b>{opp.playerName}</b> · {opp.handCount} in hand
+                <button className="x" onClick={() => { if (confirm("Concede?")) send({ type: "concede", seat: ME }); }} aria-label="concede">✕</button>
+              </div>
+              <button className="loglines" onClick={() => setShowLog((v) => !v)}>
+                {logs.map((l) => <span key={l.id}>{l.message}</span>)}
+              </button>
+            </>
+          }
+        />
 
-      <div className="mid">
+        <Seat
+          p={me}
+          press={pressCard}
+          pressDon={myTurn ? pressDon : undefined}
+          drop={drop}
+          litIds={new Set([...battleIds, ...canAct, ...stepIds, ...pickIds])}
+          deckSplit={
+            tray === "place" && myPrompt
+              ? (half) => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, optionId: half })
+              : undefined
+          }
+          corner={
+            <>
+              <div className="turn">{turnLabel}</div>
+              <Phases current={state.status === "active" ? state.phase : null} />
+            </>
+          }
+          actions={
+            <>
+              {undo && myTurn && <button className="ghost small" onClick={undo}>Undo DON</button>}
+              <button className="end" disabled={!endTurn} onClick={() => send({ type: "endTurn", seat: ME })}>End turn</button>
+            </>
+          }
+        />
+
         {battle && (
-          <span className="battle">
-            {cardName(state.cards[battle.attackerId].cardId)} {battle.attackPower} ⚔{" "}
-            {cardName(state.cards[battle.targetId].cardId)} {defense}
-          </span>
-        )}
-        {prompt && prompt.seat !== ME ? (
-          <span className="waiting">{battle && " · "}Waiting for opponent…</span>
-        ) : (
-          !battle && <button className="logline" onClick={() => setShowLog((v) => !v)}>{lastLog?.message ?? "…"}</button>
-        )}
-      </div>
-
-      <Seat
-        p={me}
-        phase={state.activeSeat === ME && state.status === "active" ? state.phase : null}
-        press={pressCard}
-        pressDon={myTurn ? pressDon : undefined}
-        drop={drop}
-        litIds={new Set([...battleIds, ...canAct, ...stepIds, ...pickIds])}
-        deckSplit={
-          tray === "place" && myPrompt
-            ? (half) => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, optionId: half })
-            : undefined
-        }
-        corner={
-          <>
-            {undo && myTurn && <button className="ghost small" onClick={undo}>Undo DON</button>}
-            {endTurn && <button className="end" onClick={() => send({ type: "endTurn", seat: ME })}>End turn</button>}
-          </>
-        }
-      />
-      <div className="hand-wrap">
-        {myPrompt && battleStep && battle && (
           <div className="battle-bar">
             <span>
-              {cardName(state.cards[battle.attackerId].cardId)} {battle.attackPower} ⚔ {cardName(state.cards[battle.targetId].cardId)} {defense}
+              {who(battle.attackerId)} {battle.attackPower} ⚔ {who(battle.targetId)} {defense}
               {battle.counterTotal > 0 && <small> (+{battle.counterTotal})</small>}
             </span>
-            <span className="hint">
-              {battleStep === "counter"
-                ? stepIds.size ? "Drag a counter onto the defender" : "No counters in hand"
-                : "Drag a blocker onto the attacker"}
-            </span>
-            <button onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [] })}>
-              {battleStep === "counter" ? "No counter" : "No block"}
-            </button>
+            {battleStep && myPrompt ? (
+              <>
+                <span className="hint">
+                  {battleStep === "counter"
+                    ? stepIds.size ? "Drag a counter onto the defender" : "No counters in hand"
+                    : "Drag a blocker onto the attacker"}
+                </span>
+                <button onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [] })}>
+                  {battleStep === "counter" ? "No counter" : "No block"}
+                </button>
+              </>
+            ) : (
+              prompt && prompt.seat !== ME && <span className="hint">Opponent is deciding…</span>
+            )}
           </div>
         )}
-        <Hand cards={view.players[ME].hand} press={pressCard} litIds={battleStep ? stepIds : tray === "pick" ? pickIds : canAct} />
+
+        <Hand
+          cards={view.players[ME].hand}
+          press={pressCard}
+          litIds={battleStep ? stepIds : tray === "pick" ? pickIds : canAct}
+          dim={!!battleStep}
+          pos={handPos}
+          onLift={(v) => setHandUp((cur) => (v === "toggle" ? !cur : v))}
+        />
       </div>
 
       <BattleArrow battle={battle} />
