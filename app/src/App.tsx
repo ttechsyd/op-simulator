@@ -13,6 +13,7 @@ import { Preview } from "./Preview";
 import { Tray, pickTargets, trayMode } from "./Tray";
 import { Log } from "./Log";
 import { BattleArrow, useCardMotion } from "./anim";
+import { useManualTurnStart } from "./turnStart";
 import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "./drag";
 import { BOT, DECKS, ME, newMatch, pendingPrompt, useMatch, type DeckId } from "./match";
 import { cardName } from "./cards";
@@ -189,7 +190,9 @@ function Game({
   onQuit: () => void;
   onBack: MutableRefObject<() => boolean>;
 }) {
-  const { state, send, error, undo } = useMatch(initial);
+  const { state: real, send, error, undo } = useMatch(initial);
+  // draw and DON!! wait for a tap; the engine has already done them underneath
+  const { state, step, donLeft, draw, takeDon } = useManualTurnStart(real);
   const [preview, setPreview] = useState<{ group: ProjectedCard[]; start: number } | null>(null);
   const [layout, setLayout] = useState<Layout>([null, null, null, null, null]);
   const [showLog, setShowLog] = useState(false);
@@ -388,6 +391,8 @@ function Game({
           pressDon={myTurn ? pressDon : undefined}
           drop={drop}
           litIds={new Set([...battleIds, ...canAct, ...stepIds, ...pickIds])}
+          onDeck={step === "draw" ? draw : undefined}
+          onDon={step === "don" ? takeDon : undefined}
           deckSplit={
             tray === "place" && myPrompt
               ? (half) => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, optionId: half })
@@ -401,8 +406,14 @@ function Game({
           }
           actions={
             <>
-              {undo && myTurn && <button className="ghost small" onClick={undo}>Undo DON</button>}
-              <button className="end" disabled={!endTurn} onClick={() => send({ type: "endTurn", seat: ME })}>End turn</button>
+              {undo && myTurn && !step && <button className="ghost small" onClick={undo}>Undo DON</button>}
+              {step === "draw" ? (
+                <button className="end" onClick={draw}>Draw</button>
+              ) : step === "don" ? (
+                <button className="end" onClick={takeDon}>Take DON!! ({donLeft})</button>
+              ) : (
+                <button className="end" disabled={!endTurn} onClick={() => send({ type: "endTurn", seat: ME })}>End turn</button>
+              )}
             </>
           }
         />

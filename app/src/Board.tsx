@@ -154,6 +154,8 @@ export function Seat({
   litIds,
   corner,
   actions,
+  onDeck,
+  onDon,
   deckSplit,
 }: {
   p: ProjectedPlayerState;
@@ -166,6 +168,9 @@ export function Seat({
   corner?: ReactNode;
   // End turn and friends, on the bottom row beside the cost area
   actions?: ReactNode;
+  // the turn's draw and DON!! wait on the piles until tapped
+  onDeck?: () => void;
+  onDon?: () => void;
   // a "top or bottom of the deck" prompt is answered by dropping or tapping on half the pile
   deckSplit?: (half: "top" | "bottom") => void;
 }) {
@@ -213,7 +218,11 @@ export function Seat({
       </div>
 
       <div className="z-piles">
-        <div className={`pile deck ${opponent ? "" : dropClass("deck", drop)}`} data-drop={opponent || deckSplit ? undefined : "deck"}>
+        <div
+          className={`pile deck ${onDeck ? "lit" : ""} ${opponent ? "" : dropClass("deck", drop)}`}
+          data-drop={opponent || deckSplit ? undefined : "deck"}
+          onClick={onDeck}
+        >
           <div className="card back" />
           <span className="count">{p.deckCount}</span>
           {deckSplit &&
@@ -234,7 +243,7 @@ export function Seat({
         </div>
       </div>
 
-      <div className="z-dondeck">
+      <div className={`z-dondeck ${onDon ? "lit" : ""}`} onClick={onDon}>
         <Don />
         <span className="don-count">{p.donDeckCount}</span>
       </div>
