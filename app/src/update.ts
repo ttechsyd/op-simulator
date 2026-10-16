@@ -1,4 +1,4 @@
-import { Capacitor, CapacitorHttp } from "@capacitor/core";
+import { Capacitor, CapacitorHttp, registerPlugin } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import { CapacitorUpdater } from "@capgo/capacitor-updater";
 
@@ -65,7 +65,10 @@ export async function applyUpdate(rel: Release, onProgress: (pct: number) => voi
   }
 }
 
-// hands the apk to the system browser; android then offers to install it over this app
-export function openApk(rel: Release) {
-  window.open(rel.apk!, "_system");
+// our own little android plugin: download manager plus the package installer
+const ApkInstaller = registerPlugin<{ install(o: { url: string }): Promise<void> }>("ApkInstaller");
+
+// resolves once the installer screen is up; the user takes it from there
+export function installApk(rel: Release) {
+  return ApkInstaller.install({ url: rel.apk! });
 }

@@ -18,7 +18,7 @@ import { BOT, DECKS, ME, newMatch, pendingPrompt, useMatch, type DeckId } from "
 import { cardName } from "./cards";
 import { Builder, DeckList } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, type Deck } from "./decks";
-import { appReady, applyUpdate, bundleVersion, checkForUpdate, openApk, type Check } from "./update";
+import { appReady, applyUpdate, bundleVersion, checkForUpdate, installApk, type Check } from "./update";
 
 // ?seed=123&mine=red-aggro&theirs=st01 skips the menu, handy for replaying a hand
 const params = new URLSearchParams(location.search);
@@ -34,6 +34,7 @@ export default function App() {
   const [check, setCheck] = useState<Check | "checking" | null>(null);
   const [pct, setPct] = useState<number | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [apkState, setApkState] = useState<"idle" | "downloading" | "installer">("idle");
   const release = check !== null && check !== "checking" && check.status === "update" ? check.release : null;
   const apkRelease = check !== null && check !== "checking" && check.status === "native" ? check.release : null;
 
@@ -119,9 +120,32 @@ export default function App() {
           <div className="update">
             <span>
               App update {apkRelease.version}
-              <small>new native build · installs over this one</small>
+              <small>
+                {updateError
+                  ? `Failed: ${updateError}`
+                  : apkState === "downloading"
+                    ? "downloading, watch the notification"
+                    : apkState === "installer"
+                      ? "confirm the install when Android asks"
+                      : "new native build · installs over this one"}
+              </small>
             </span>
-            <button className="small" onClick={() => openApk(apkRelease)}>Download APK</button>
+            <button
+              className="small"
+              disabled={apkState === "downloading"}
+              onClick={() => {
+                setApkState("downloading");
+                setUpdateError(null);
+                installApk(apkRelease)
+                  .then(() => setApkState("installer"))
+                  .catch((e: Error) => {
+                    setApkState("idle");
+                    setUpdateError(e.message || "download failed");
+                  });
+              }}
+            >
+              {apkState === "installer" ? "Install again" : "Install update"}
+            </button>
           </div>
         )}
         <small className="ver">
