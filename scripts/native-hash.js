@@ -4,22 +4,16 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { execFileSync } = require("child_process");
 
 const root = path.join(__dirname, "..", "app");
-const skip = new Set(["build", ".gradle", ".idea", "local.properties", "keystore.properties", "opsim.keystore", "public"]);
-
-function walk(dir, out) {
-  for (const name of fs.readdirSync(dir).sort()) {
-    if (skip.has(name) || name.endsWith(".keystore")) continue;
-    const p = path.join(dir, name);
-    if (fs.statSync(p).isDirectory()) walk(p, out);
-    else out.push(p);
-  }
-}
-
-const files = [];
-walk(path.join(root, "android"), files);
-files.push(path.join(root, "capacitor.config.ts"));
+// only what git tracks, so a local checkout and the CI runner see the same set
+const files = execFileSync("git", ["ls-files", "android", "capacitor.config.ts"], { cwd: root, encoding: "utf8" })
+  .split("
+")
+  .filter(Boolean)
+  .sort()
+  .map((f) => path.join(root, f));
 
 const h = crypto.createHash("sha256");
 for (const f of files) {
