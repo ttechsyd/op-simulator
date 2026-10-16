@@ -32,13 +32,20 @@ The code in this repo must not read as AI-generated. Concretely:
 - Build the engine before the app: `pnpm exec turbo run build` in the one-piece workspace.
 - Git has `core.longpaths` on for this clone; leave it.
 
-## Multiplayer is coming
+## Two kinds of table
 
-The bot is a stand-in for a real opponent. Keep the client seat-blind: draw the table from
-`projectStateForSeat(state, ME)` and send `EngineCommand`s through one `send`; nothing in the
-UI may peek at the opponent's hidden cards or drive their prompts. Anything that only works
-because both seats live in the same process (undo snapshots, bot timers) stays inside
-`match.ts` so a network transport can replace it.
+The client talks to a `Table` (match.ts): `localTable` runs the engine in-process with the bot
+or with both seats on one phone, `openRoom` (net.ts) talks to `server/`, a small Node
+WebSocket service that owns the real state and sends it whole once, then as immer patches.
+Keep the client seat-blind: draw the table from `projectStateForSeat(state, ME)` and send
+`EngineCommand`s through one `send`; nothing in the UI may peek at the opponent's hidden
+cards or drive their prompts. Anything that only works because both seats live in the same
+process (undo snapshots, bot timers) stays inside `match.ts`.
+
+The server is bundled with esbuild (`cd server && pnpm build`) because the engine's build
+still imports a sibling package as TypeScript. `.github/workflows/server.yml` deploys it to
+Fly as `op-simulator` on pushes to `server/`; it needs the `FLY_API_TOKEN` secret. Run it
+locally with `pnpm --dir server dev` and open the app with `?server=ws://localhost:8787`.
 
 ## Working from a fresh clone (cloud sessions too)
 

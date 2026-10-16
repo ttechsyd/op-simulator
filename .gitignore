@@ -1,3 +1,4 @@
 opsim-debug.apk
 *.apk
 node_modules/
+server/dist/

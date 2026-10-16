@@ -27,7 +27,7 @@ export function sitAt(seat: MatchSeat) {
   BOT = seat === "south" ? "north" : "south";
 }
 
-export type Mode = "bot" | "self";
+export type Mode = "bot" | "self" | "online";
 
 // "saved:<id>" is one of the user's decks, "pre:<code>" an official starter, the rest are the engine's test decks
 export type DeckId = string;
@@ -42,7 +42,7 @@ export const DECKS: { id: DeckId; label: string }[] = [
   { id: "yellow-trigger", label: "Test: yellow trigger" },
 ];
 
-function playerConfig(deck: DeckId, playerName: string): MatchPlayerConfig {
+export function playerConfig(deck: DeckId, playerName: string): MatchPlayerConfig {
   if (deck.startsWith("saved:")) {
     const d = loadDecks().find((x) => x.id === deck.slice(6));
     if (d?.leader) return { leaderCardId: d.leader, mainDeck: mainDeckList(d), donDeckCount: 10, playerName };
@@ -91,7 +91,11 @@ export type Table = {
   close(): void;
 };
 
-export type TableEvent = { kind: "changed" } | { kind: "rejected"; reason: string };
+export type TableEvent =
+  | { kind: "changed" }
+  | { kind: "rejected"; reason: string }
+  // only a remote table says anything about the wire
+  | { kind: "link"; me: "connecting" | "online" | "reconnecting"; peer: boolean };
 
 export function localTable(initial: MatchState, mode: Mode): Table {
   let state = initial;
@@ -178,18 +182,20 @@ function botCommand(state: MatchState, mode: Mode): EngineCommand | null {
   return null;
 }
 
-export function useMatch(initial: MatchState, mode: Mode) {
-  // TODO: pick a remote table here once there's a server to talk to; the rest of
-  // the hook and everything in App.tsx shouldn't need to know which it got
-  const [table] = useState(() => localTable(initial, mode));
+export function useMatch(table: Table) {
   const [state, setState] = useState(table.state);
   const [undo, setUndo] = useState(() => table.undo ?? null);
   const [error, setError] = useState<string | null>(null);
+  const [link, setLink] = useState<{ me: "connecting" | "online" | "reconnecting"; peer: boolean } | null>(null);
 
   useEffect(() => {
     const off = table.subscribe((ev) => {
       if (ev.kind === "rejected") {
         setError(ev.reason);
+        return;
+      }
+      if (ev.kind === "link") {
+        setLink({ me: ev.me, peer: ev.peer });
         return;
       }
       setState(table.state);
@@ -207,5 +213,5 @@ export function useMatch(initial: MatchState, mode: Mode) {
     return () => clearTimeout(t);
   }, [error]);
 
-  return { state, send: table.send, error, undo };
+  return { state, send: table.send, error, undo, link };
 }

@@ -17,6 +17,7 @@
     "@tcg/op-cards": "link:../tcg-engines/submodules/one-piece/packages/cards",
     "@tcg/op-engine": "link:../tcg-engines/submodules/one-piece/packages/engine",
     "@tcg/op-types": "link:../tcg-engines/submodules/one-piece/packages/types",
+    "immer": "^11.1.21",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

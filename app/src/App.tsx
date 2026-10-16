@@ -16,7 +16,9 @@ import { Log } from "./Log";
 import { BattleArrow, useCardMotion } from "./anim";
 import { useManualTurnStart } from "./turnStart";
 import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "./drag";
-import { BOT, DECKS, ME, newMatch, pendingPrompt, seatToShow, sitAt, useMatch, type DeckId, type Mode } from "./match";
+import { BOT, DECKS, ME, localTable, newMatch, pendingPrompt, seatToShow, sitAt, useMatch, type DeckId, type Mode, type Table } from "./match";
+import { Lobby } from "./Lobby";
+import { forgetRoom } from "./net";
 import { cardName } from "./cards";
 import { Builder, DeckList, DeckView } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from "./decks";
@@ -28,11 +30,13 @@ const params = new URLSearchParams(location.search);
 export default function App() {
   const [mine, setMine] = useState<DeckId>(params.get("mine") ?? "pre:ST01");
   const [theirs, setTheirs] = useState<DeckId>(params.get("theirs") ?? "red-aggro");
-  const [mode, setMode] = useState<Mode>(params.get("mode") === "self" ? "self" : "bot");
-  const [match, setMatch] = useState<MatchState | null>(() =>
-    params.has("seed") ? newMatch(mine, theirs, mode, Number(params.get("seed"))) : null,
+  const [mode, setMode] = useState<Mode>(params.get("mode") === "self" ? "self" : params.get("mode") === "online" ? "online" : "bot");
+  const [match, setMatch] = useState<{ table: Table; seat: MatchSeat } | null>(() =>
+    params.has("seed") && mode !== "online"
+      ? { table: localTable(newMatch(mine, theirs, mode, Number(params.get("seed"))), mode), seat: "south" }
+      : null,
   );
-  const [screen, setScreen] = useState<"menu" | "decks" | { view: Deck } | { edit: Deck }>("menu");
+  const [screen, setScreen] = useState<"menu" | "decks" | "lobby" | { view: Deck } | { edit: Deck }>("menu");
   const [saved, setSaved] = useState(loadDecks);
   const [check, setCheck] = useState<Check | "checking" | null>(null);
   const [pct, setPct] = useState<number | null>(null);
@@ -62,6 +66,9 @@ export default function App() {
     };
   }, []);
 
+  if (!match && screen === "lobby") {
+    return <Lobby deck={mine} onBack={() => setScreen("menu")} onStart={(table, seat) => { setScreen("menu"); setMatch({ table, seat }); }} />;
+  }
   if (!match && screen === "decks") {
     return (
       <DeckList
@@ -95,8 +102,9 @@ export default function App() {
         <label>
           Mode
           <select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-            <option value="bot">Against the bot</option>
+            <option value="bot">Player vs AI</option>
             <option value="self">Solo, both sides</option>
+            <option value="online">Online with a friend</option>
           </select>
         </label>
         <label>
@@ -105,13 +113,19 @@ export default function App() {
             {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
           </select>
         </label>
-        <label>
-          {mode === "self" ? "Player 2 deck" : "Bot deck"}
-          <select value={theirs} onChange={(e) => setTheirs(e.target.value as DeckId)}>
-            {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-          </select>
-        </label>
-        <button onClick={() => setMatch(newMatch(mine, theirs, mode))}>Play</button>
+        {mode !== "online" && (
+          <label>
+            {mode === "self" ? "Player 2 deck" : "AI deck"}
+            <select value={theirs} onChange={(e) => setTheirs(e.target.value as DeckId)}>
+              {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+            </select>
+          </label>
+        )}
+        {mode === "online" ? (
+          <button onClick={() => setScreen("lobby")}>Find a game</button>
+        ) : (
+          <button onClick={() => setMatch({ table: localTable(newMatch(mine, theirs, mode), mode), seat: "south" })}>Play</button>
+        )}
         <button className="ghost" onClick={() => setScreen("decks")}>Decks</button>
         {release && (
           <div className="update">
@@ -187,23 +201,37 @@ export default function App() {
       </div>
     );
   }
-  return <Game initial={match} mode={mode} onQuit={() => setMatch(null)} onBack={onBack} />;
+  return (
+    <Game
+      table={match.table}
+      seat={match.seat}
+      mode={mode}
+      onQuit={() => {
+        match.table.close();
+        if (mode === "online") forgetRoom();
+        setMatch(null);
+      }}
+      onBack={onBack}
+    />
+  );
 }
 
 function Game({
-  initial,
+  table,
+  seat: mySeat,
   mode,
   onQuit,
   onBack,
 }: {
-  initial: MatchState;
+  table: Table;
+  seat: MatchSeat;
   mode: Mode;
   onQuit: () => void;
   onBack: MutableRefObject<() => boolean>;
 }) {
-  const { state: real, send, error, undo } = useMatch(initial, mode);
+  const { state: real, send, error, undo, link } = useMatch(table);
   // playing both sides, the table turns to face whoever is up, behind a "pass the phone" screen
-  const seat = mode === "self" ? seatToShow(real) : "south";
+  const seat = mode === "self" ? seatToShow(real) : mySeat;
   sitAt(seat);
   const [turned, setTurned] = useState<{ seat: MatchSeat; pass: MatchSeat | null }>({ seat, pass: null });
   if (turned.seat !== seat) setTurned({ seat, pass: mode === "self" && real.status === "active" ? seat : null });
@@ -501,6 +529,9 @@ function Game({
       )}
       {state.status === "finished" && <GameOver state={state} onQuit={onQuit} />}
       {error && <div className="toast">{error}</div>}
+      {link && (link.me !== "online" || !link.peer) && (
+        <div className="toast link">{link.me !== "online" ? "Reconnecting…" : "Your opponent dropped off, waiting for them…"}</div>
+      )}
     </div>
   );
 }

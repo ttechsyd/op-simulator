@@ -336,6 +336,14 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 }
 .pass h2 { margin: 0; font-size: 28px; letter-spacing: 1px; }
 .pass p { margin: 0; color: var(--muted); }
+.toast.link { background: #2b3f52; color: var(--ink); bottom: auto; top: max(10px, env(safe-area-inset-top)); }
+.lobby input { font: inherit; font-size: 15px; color: var(--ink); background: var(--panel); border: 1px solid #3e556b; border-radius: 8px; padding: 8px; min-width: 240px; }
+.lobby .join { display: flex; gap: 8px; }
+.lobby .join input { min-width: 0; width: 120px; text-transform: uppercase; letter-spacing: 4px; text-align: center; }
+.lobby .join button { min-width: 0; flex: 1; }
+.lobby .code { font-size: 44px; font-weight: 700; letter-spacing: 10px; padding-left: 10px; }
+.lobby .bad { color: #ff8a8a; }
+.lobby .server { min-width: 0; width: 260px; font-size: 11px; padding: 4px 6px; }
 .toast {
   position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
   background: #5b2020; color: #ffd9d9; padding: 8px 14px; border-radius: 8px;
