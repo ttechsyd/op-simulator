@@ -75,6 +75,7 @@ jobs:
 
       - name: pack
         run: |
+          (cd app && npx cap sync android)
           cd app/dist && zip -qr ../../bundle.zip .
           cd ../..
           cat > version.json <<EOF
@@ -83,6 +84,8 @@ jobs:
             "engine": "${{ steps.v.outputs.engine }}",
             "cards": ${{ steps.cards.outputs.cards }},
             "checksum": "$(sha256sum bundle.zip | cut -d' ' -f1)",
+            "native": "$(node scripts/native-hash.js)",
+            "apk": "https://github.com/${{ github.repository }}/releases/download/bundle-${{ steps.v.outputs.version }}/opsim.apk",
             "url": "https://github.com/${{ github.repository }}/releases/download/bundle-${{ steps.v.outputs.version }}/bundle.zip"
           }
           EOF
@@ -106,6 +109,7 @@ jobs:
           KS_B64: ${{ secrets.OPSIM_KEYSTORE_B64 }}
           KS_PW: ${{ secrets.OPSIM_KEYSTORE_PASSWORD }}
           BUNDLE_VERSION: ${{ steps.v.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
 
       - name: release
         run: |

@@ -18,7 +18,7 @@ import { BOT, DECKS, ME, newMatch, pendingPrompt, useMatch, type DeckId } from "
 import { cardName } from "./cards";
 import { Builder, DeckList } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, type Deck } from "./decks";
-import { appReady, applyUpdate, bundleVersion, checkForUpdate, type Check } from "./update";
+import { appReady, applyUpdate, bundleVersion, checkForUpdate, openApk, type Check } from "./update";
 
 // ?seed=123&mine=red-aggro&theirs=st01 skips the menu, handy for replaying a hand
 const params = new URLSearchParams(location.search);
@@ -35,6 +35,7 @@ export default function App() {
   const [pct, setPct] = useState<number | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const release = check !== null && check !== "checking" && check.status === "update" ? check.release : null;
+  const apkRelease = check !== null && check !== "checking" && check.status === "native" ? check.release : null;
 
   const lookForUpdate = () => {
     setCheck("checking");
@@ -112,6 +113,15 @@ export default function App() {
             ) : (
               <span className="pct">{pct}%</span>
             )}
+          </div>
+        )}
+        {apkRelease && (
+          <div className="update">
+            <span>
+              App update {apkRelease.version}
+              <small>new native build · installs over this one</small>
+            </span>
+            <button className="small" onClick={() => openApk(apkRelease)}>Download APK</button>
           </div>
         )}
         <small className="ver">

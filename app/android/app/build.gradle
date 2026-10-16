@@ -7,8 +7,9 @@ android {
         applicationId "com.opsim.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "0.1." + new Date().format("yyyyMMddHHmm")
+        // the name carries the native fingerprint so the app can tell a JS-only release from one that needs this APK
+        versionCode (System.getenv("BUILD_NUMBER") ?: "1").toInteger()
+        versionName "0.1." + ["node", "$rootDir/../../scripts/native-hash.js"].execute().text.trim()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
