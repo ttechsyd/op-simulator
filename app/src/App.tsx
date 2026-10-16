@@ -11,7 +11,7 @@ import {
 import { Hand, OppHand, Phases, Seat } from "./Board";
 import { GameOver, PromptSheet, SetupSheet } from "./Overlays";
 import { Preview } from "./Preview";
-import { Tray, pickTargets, trayMode } from "./Tray";
+import { Tray, pickTargets, shownCard, trayMode } from "./Tray";
 import { Log } from "./Log";
 import { BattleArrow, useCardMotion } from "./anim";
 import { useManualTurnStart } from "./turnStart";
@@ -19,7 +19,7 @@ import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "
 import { BOT, DECKS, ME, localTable, newMatch, pendingPrompt, seatToShow, sitAt, useMatch, type DeckId, type Mode, type Table } from "./match";
 import { Lobby } from "./Lobby";
 import { forgetRoom } from "./net";
-import { cardName } from "./cards";
+import { cardImage, cardName } from "./cards";
 import { Builder, DeckList, DeckView } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from "./decks";
 import { appReady, applyUpdate, bundleVersion, checkForUpdate, installApk, type Check } from "./update";
@@ -246,6 +246,8 @@ function Game({
   const prompt = pendingPrompt(state);
   const myPrompt = prompt?.seat === ME ? prompt : null;
   const tray = myPrompt ? trayMode(myPrompt) : null;
+  // a life card with a trigger is offered in the readout over the seam, not a full-width tray
+  const trigger = tray === "trigger" ? myPrompt : null;
   // a pick prompt can be answered on the table too: drag the card where the
   // effect sends it (trash, deck, life) or onto the tray itself
   const [picked, setPicked] = useState<string[]>([]);
@@ -462,47 +464,72 @@ function Game({
           }
         />
 
-        {battle && (
-          <div className="battle-bar">
-            <span>
-              {who(battle.attackerId)} {battle.attackPower} ⚔ {who(battle.targetId)} {defense}
-              {battle.counterTotal > 0 && <small> (+{battle.counterTotal})</small>}
-            </span>
-            {battleStep && myPrompt ? (
-              <>
-                <span className="hint">
-                  {battleStep === "counter"
-                    ? stepIds.size ? "Drag a counter onto the defender" : "No counters in hand"
-                    : "Drag a blocker onto the attacker"}
-                </span>
-                <button onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [] })}>
-                  {battleStep === "counter" ? "No counter" : "No block"}
-                </button>
-              </>
-            ) : (
-              prompt && prompt.seat !== ME && <span className="hint">Opponent is deciding…</span>
-            )}
-          </div>
-        )}
-
         <Hand
           cards={view.players[ME].hand}
           press={pressCard}
           litIds={battleStep ? stepIds : tray === "pick" ? pickIds : canAct}
           dim={!!battleStep}
+          counters={battleStep === "counter"}
           pos={handPos}
           onLift={(v) => setHandUp((cur) => (v === "toggle" ? !cur : v))}
         />
       </div>
 
+      {trigger ? (
+        <div className="battle-bar">
+          <img
+            className="thumb"
+            src={cardImage(state.cards[shownCard(trigger, state)].cardId)}
+            alt=""
+            onClick={() => {
+              const c = state.cards[shownCard(trigger, state)];
+              setPreview({ group: [{ instanceId: c.instanceId, cardId: c.cardId, name: cardName(c.cardId), owner: c.owner, zone: c.zone, rested: false, attachedDon: 0, lifeValue: null, power: null, cost: null, attribute: null, hidden: false }], start: 0 });
+            }}
+          />
+          <span>
+            {cardName(state.cards[shownCard(trigger, state)].cardId)}
+            <small> {trigger.resolutionContext?.intent === "lifeTrigger" ? "has a [Trigger]" : trigger.details}</small>
+          </span>
+          {trigger.options.map((o) => (
+            <button key={o.id} className={o.id === "skip" ? "ghost" : ""} onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: trigger.id, optionId: o.id })}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      ) : battle ? (
+        <div className="battle-bar">
+          <span>
+            {who(battle.attackerId)} {battle.attackPower} ⚔ {who(battle.targetId)} {defense}
+            {battle.counterTotal > 0 && <small> (+{battle.counterTotal})</small>}
+          </span>
+          {battleStep && myPrompt ? (
+            <>
+              <span className="hint">
+                {battleStep === "counter"
+                  ? defense > battle.attackPower
+                    ? "Holding"
+                    : `Need +${battle.attackPower + 1000 - defense}`
+                  : "Drag a blocker onto the attacker"}
+                {battleStep === "counter" && stepIds.size > 0 && " · drag or tap a counter"}
+                {battleStep === "counter" && stepIds.size === 0 && " · no counters in hand"}
+              </span>
+              <button onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [] })}>
+                {battleStep === "counter" ? (defense > battle.attackPower ? "Done" : "Take it") : "No block"}
+              </button>
+            </>
+          ) : (
+            prompt && prompt.seat !== ME && <span className="hint">Opponent is deciding…</span>
+          )}
+        </div>
+      ) : null}
       <BattleArrow battle={battle} />
       <DragLayer drag={drag} />
       {showLog && <Log logs={view.logs} onClose={() => setShowLog(false)} />}
 
       {state.status === "setup" && <SetupSheet legal={legal} send={send} />}
-      {myPrompt && tray && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} picked={picked} setPicked={setPicked} send={send} press={press} />}
+      {myPrompt && tray && !trigger && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} picked={picked} setPicked={setPicked} send={send} press={press} />}
       {myPrompt && !tray && !battleStep && <PromptSheet key={myPrompt.id} prompt={myPrompt} state={state} send={send} />}
-      {preview && (!myPrompt || battleStep) && (
+      {preview && (!myPrompt || battleStep || trigger) && (
         <Preview
           group={preview.group}
           start={preview.start}

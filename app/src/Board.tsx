@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { getCard } from "@tcg/op-cards";
 import type { MatchPhase, ProjectedCard, ProjectedPlayerState } from "@tcg/op-engine";
-import { cardImage } from "./cards";
+import { cardCounter, cardImage } from "./cards";
 import { retryArt } from "./decks";
 
 // a press is a tap or the start of a drag; the game decides which, and gets the
@@ -35,6 +35,7 @@ export function CardView({
   drop,
   label,
   style,
+  badge,
 }: {
   card: ProjectedCard | null;
   group?: ProjectedCard[];
@@ -46,6 +47,8 @@ export function CardView({
   // what an empty slot says about itself
   label?: string;
   style?: CSSProperties;
+  // a corner note like the counter value during a counter step
+  badge?: string;
 }) {
   const dc = dropClass(dropKey, drop);
   if (!card)
@@ -69,6 +72,7 @@ export function CardView({
       >
         <img src={cardImage(card.cardId)} alt={card.name ?? card.cardId} draggable={false} onError={(e) => retryArt(e.currentTarget)} />
         {card.power !== null && card.zone !== "hand" && <span className={`pow ${buffed ? "up" : ""}`}>{card.power}</span>}
+        {badge && <span className="badge">{badge}</span>}
       </div>
     );
   if (!card.attachedDon) return face;
@@ -266,6 +270,7 @@ export function Hand({
   press,
   litIds,
   dim,
+  counters,
   pos,
   onLift,
 }: {
@@ -274,6 +279,8 @@ export function Hand({
   litIds?: Set<string>;
   // a counter or blocker step greys out the cards that can't answer it
   dim?: boolean;
+  // and the counter step writes each usable card's counter value on it
+  counters?: boolean;
   pos: "" | "up" | "half" | "tuck";
   onLift: (up: boolean | "toggle") => void;
 }) {
@@ -297,6 +304,7 @@ export function Hand({
             press={press}
             lit={lit}
             dim={dim && !lit}
+            badge={counters && lit && c.cardId ? `+${cardCounter(c.cardId) ?? 0}` : undefined}
             style={{ marginLeft: i ? step - 80 : 0, transform: `rotate(${off * 3}deg) translateY(${Math.abs(off) * 3}px)` }}
           />
         );
