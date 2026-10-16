@@ -17,7 +17,7 @@ import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "
 import { BOT, DECKS, ME, newMatch, pendingPrompt, useMatch, type DeckId } from "./match";
 import { cardName } from "./cards";
 import { Builder, DeckList } from "./Builder";
-import { deleteDeck, loadDecks, newDeck, type Deck } from "./decks";
+import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from "./decks";
 import { appReady, applyUpdate, bundleVersion, checkForUpdate, installApk, type Check } from "./update";
 
 // ?seed=123&mine=red-aggro&theirs=st01 skips the menu, handy for replaying a hand
@@ -45,6 +45,7 @@ export default function App() {
   useEffect(() => {
     appReady();
     lookForUpdate();
+    purgeUnverifiedArt();
   }, []);
   // the running Game swaps in its own handler; false means "nothing to close, leave the app"
   const onBack = useRef<() => boolean>(() => false);

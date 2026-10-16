@@ -100,7 +100,7 @@ export function Builder({ initial, onDone }: { initial: Deck; onDone: () => void
 
   const save = () => {
     saveDeck(deck);
-    prefetchImages(deck);
+    prefetchImages(deck).catch(() => {});
     onDone();
   };
 

@@ -71,10 +71,17 @@ export const preconDecks = ONE_PIECE_PRECONSTRUCTED_DECKS.map((d) => ({
   mainDeck: d.mainDeck.flatMap((e) => Array(e.quantity).fill(e.cardId) as string[]),
 }));
 
-// pulls every face in the deck through the service worker so it's there offline
-export function prefetchImages(deck: Deck) {
+// pulls every face in the deck into the cache so it's there offline
+export async function prefetchImages(deck: Deck) {
   const ids = [deck.leader, ...Object.keys(deck.cards)].filter((x): x is string => !!x);
-  for (const id of ids) fetch(cardImage(getCard(id).id), { mode: "no-cors" }).catch(() => {});
+  const cache = await caches.open(ART_CACHE);
+  const have = new Set((await cache.keys()).map((r) => r.url));
+  const todo = ids.map((id) => cardImage(getCard(id).id)).filter((u) => !have.has(u));
+  const ctl = new AbortController();
+  let i = 0;
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    while (i < todo.length) await fetchArt(todo[i++], cache, ctl.signal);
+  }));
 }
 
 const ART_CACHE = "card-art-v1";
@@ -122,7 +129,19 @@ export async function downloadArt(onProgress: (done: number, total: number) => v
       onProgress(++done, total);
     }
   };
-  await Promise.all(Array.from({ length: 12 }, worker));
+  await Promise.all(Array.from({ length: 8 }, worker));
+}
+
+// earlier builds let the service worker cache whatever came back, error pages included;
+// drop those once so only validated faces remain
+export async function purgeUnverifiedArt() {
+  if (!("caches" in window) || localStorage.getItem("opsim.artPurged")) return;
+  const cache = await caches.open(ART_CACHE);
+  for (const k of await cache.keys()) {
+    const r = await cache.match(k);
+    if (r?.type === "opaque") await cache.delete(k);
+  }
+  localStorage.setItem("opsim.artPurged", "1");
 }
 
 // a face that fails to render was a throttled error page that got cached: drop it and load once more

@@ -11,9 +11,9 @@ self.addEventListener("fetch", (e) => {
     caches.open(CACHE).then(async (cache) => {
       const hit = await cache.match(url);
       if (hit) return hit;
-      const res = await fetch(e.request);
-      if (res.ok || res.type === "opaque") cache.put(url, res.clone());
-      return res;
+      // only the app's own validated downloads write the cache: a cross-origin image fetched
+      // here is opaque, and a throttled error page looks exactly like a card face
+      return fetch(e.request);
     }),
   );
 });
