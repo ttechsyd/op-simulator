@@ -415,11 +415,25 @@ button small { display: block; font-size: 10px; color: var(--muted); }
   45% { transform: translate(4px, -2px) rotate(3deg); }
   70% { transform: translate(-2px, 1px); }
 }
-.don-under { animation: don-in 0.25s ease-out; }
-@keyframes don-in {
-  from { transform: translate(-18px, 14px); opacity: 0; }
-  to { transform: none; opacity: 1; }
+
+/* cards and DON!! in flight between zones, on their own layer above the table */
+#flyers { position: fixed; inset: 0; z-index: 26; pointer-events: none; overflow: hidden; }
+.flyer { position: absolute; left: 0; top: 0; perspective: 600px; filter: drop-shadow(0 12px 14px rgba(0,0,0,0.55)); will-change: transform; }
+.flyer-in { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
+.flyer-back, .flyer-face { position: absolute; inset: 0; border-radius: 6px; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.flyer-back { background: repeating-linear-gradient(45deg, #2d3b55 0 6px, #24304a 6px 12px); border: 1px solid #4a5a7a; }
+.flyer-face { transform: rotateY(180deg); overflow: hidden; background: #1b2430; }
+.flyer-face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.don-flyer .flyer-back { background: #0b0b0b; border-color: #c9a227; border-radius: 3px; }
+.don-flyer .flyer-back::after {
+  content: "DON!!"; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 5px; font-weight: 900; color: #e3b73b;
 }
+
+/* the card under your finger: a hand card fades, an attacker lifts off the mat */
+.hand .card[data-dragging] { opacity: 0.25; }
+.mat .card[data-dragging] { transform: translateY(-6px) scale(1.06); box-shadow: 0 14px 22px rgba(0,0,0,0.6); }
 .battle-arrow { z-index: 4; opacity: 0.9; }
 
 /* the battle readout floats over the seam between the mats */

@@ -242,6 +242,14 @@ function Game({
     });
 
   const { drag, press } = useDrag(potential, send, settled, place);
+  // mark the card being dragged; React leaves an attribute it doesn't know about alone
+  const dragId = drag && (drag.source.kind === "hand" || drag.source.kind === "attacker") ? drag.source.card.instanceId : null;
+  useEffect(() => {
+    if (!dragId) return;
+    const el = document.querySelector(`[data-id="${dragId}"]`);
+    el?.setAttribute("data-dragging", "");
+    return () => el?.removeAttribute("data-dragging");
+  }, [dragId]);
 
   useEffect(() => {
     onBack.current = () => {
