@@ -30,6 +30,7 @@ export function CardView({
   group,
   press,
   lit,
+  on,
   dim,
   dropKey,
   drop,
@@ -41,6 +42,8 @@ export function CardView({
   group?: ProjectedCard[];
   press?: Press;
   lit?: boolean;
+  // picked for a prompt that is still being answered
+  on?: boolean;
   dim?: boolean;
   dropKey?: string;
   drop?: Drop;
@@ -57,7 +60,7 @@ export function CardView({
         {label && <span className="zlabel">{label}</span>}
       </div>
     );
-  const cls = ["card", card.rested ? "rested" : "", lit ? "lit" : "", dim ? "dim" : "", dc].join(" ");
+  const cls = ["card", card.rested ? "rested" : "", lit ? "lit" : "", on ? "on" : "", dim ? "dim" : "", dc].join(" ");
   const buffed = card.power !== null && card.zone !== "hand" && !!card.cardId && card.power !== printedPower(card.cardId);
   const face =
     card.hidden || !card.cardId ? (
@@ -156,6 +159,7 @@ export function Seat({
   pressDon,
   drop,
   litIds,
+  onIds,
   corner,
   actions,
   onDeck,
@@ -168,6 +172,7 @@ export function Seat({
   pressDon?: (e: ReactPointerEvent) => void;
   drop?: Drop;
   litIds?: Set<string>;
+  onIds?: Set<string>;
   // whatever lives in the mat's spare cell: phases and End turn on mine, name and log on theirs
   corner?: ReactNode;
   // End turn and friends, on the bottom row beside the cost area
@@ -179,6 +184,7 @@ export function Seat({
   deckSplit?: (half: "top" | "bottom") => void;
 }) {
   const lit = (c: ProjectedCard | null) => !!c?.instanceId && !!litIds?.has(c.instanceId);
+  const on = (c: ProjectedCard | null) => !!c?.instanceId && !!onIds?.has(c.instanceId);
   // the leader flinches when a life card is taken
   const [hit, setHit] = useState(false);
   const lastLife = useRef(p.lifeCount);
@@ -208,6 +214,7 @@ export function Seat({
             group={field}
             press={press}
             lit={lit(c)}
+            on={on(c)}
             dropKey={key(c, opponent ? undefined : `slot:${i}`)}
             drop={drop}
           />
@@ -216,9 +223,9 @@ export function Seat({
 
       <div className="z-lead">
         <div className={hit ? "hit" : ""}>
-          <CardView card={p.leader} group={field} press={press} lit={lit(p.leader)} dropKey={key(p.leader)} drop={drop} />
+          <CardView card={p.leader} group={field} press={press} lit={lit(p.leader)} on={on(p.leader)} dropKey={key(p.leader)} drop={drop} />
         </div>
-        <CardView card={p.stage} group={field} press={press} dropKey={opponent ? undefined : "stage"} drop={drop} label="Stage" />
+        <CardView card={p.stage} group={field} press={press} lit={lit(p.stage)} on={on(p.stage)} dropKey={opponent ? undefined : "stage"} drop={drop} label="Stage" />
       </div>
 
       <div className="z-piles">
@@ -269,6 +276,7 @@ export function Hand({
   cards,
   press,
   litIds,
+  onIds,
   dim,
   counters,
   pos,
@@ -277,6 +285,7 @@ export function Hand({
   cards: ProjectedCard[];
   press: Press;
   litIds?: Set<string>;
+  onIds?: Set<string>;
   // a counter or blocker step greys out the cards that can't answer it
   dim?: boolean;
   // and the counter step writes each usable card's counter value on it
@@ -303,6 +312,7 @@ export function Hand({
             group={cards}
             press={press}
             lit={lit}
+            on={!!c.instanceId && !!onIds?.has(c.instanceId)}
             dim={dim && !lit}
             badge={counters && lit && c.cardId ? `+${cardCounter(c.cardId) ?? 0}` : undefined}
             style={{ marginLeft: i ? step - 80 : 0, transform: `rotate(${off * 3}deg) translateY(${Math.abs(off) * 3}px)` }}

@@ -180,6 +180,7 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 .card.rested { transform: rotate(90deg) scale(0.8); }
 .card.lit { box-shadow: 0 0 0 2px var(--accent), 0 0 16px var(--accent); }
 .card.dim { opacity: 0.45; }
+.card.on { outline: 3px solid var(--lit); outline-offset: 1px; box-shadow: 0 0 14px var(--lit); }
 .card .pow {
   position: absolute; left: 2px; bottom: 2px;
   font-size: 9px; font-weight: 700; line-height: 1.2;
@@ -468,6 +469,8 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 .battle-bar .hint { margin: 0; color: var(--muted); font-weight: 400; font-size: 11px; }
 .battle-bar button { min-height: 24px; padding: 0 12px; font-size: 11px; border-radius: 999px; }
 .battle-bar small { font-weight: 400; color: var(--muted); }
+.battle-bar > span { max-width: 420px; white-space: normal; line-height: 1.25; }
+.battle-bar button.ghost { border-color: rgba(255,255,255,0.25); }
 .battle-bar .thumb { width: 38px; aspect-ratio: 0.716; border-radius: 3px; display: block; }
 .card .badge {
   position: absolute; top: 4px; left: 50%; transform: translateX(-50%);

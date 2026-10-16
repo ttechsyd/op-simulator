@@ -248,11 +248,23 @@ function Game({
   const tray = myPrompt ? trayMode(myPrompt) : null;
   // a life card with a trigger is offered in the readout over the seam, not a full-width tray
   const trigger = tray === "trigger" ? myPrompt : null;
+  // yes/no, how-many and top-or-bottom questions fit in the readout; the sheet is for long lists
+  const quick =
+    myPrompt && !tray && ["confirm", "chooseOption", "chooseNumber"].includes(myPrompt.choiceKind ?? "") &&
+    !myPrompt.options.some((o) => o.targetId) && myPrompt.options.length <= 8 && myPrompt.options.every((o) => o.label.length <= 16)
+      ? myPrompt
+      : null;
   // a pick prompt can be answered on the table too: drag the card where the
   // effect sends it (trash, deck, life) or onto the tray itself
   const [picked, setPicked] = useState<string[]>([]);
   useEffect(() => setPicked([]), [myPrompt?.id]);
   const pickIds = useMemo(() => (tray === "pick" && myPrompt ? pickTargets(myPrompt) : new Set<string>()), [tray, myPrompt]);
+  // when every choice is a card already on the table, the table is the picker and the
+  // readout just keeps score; the tray is for cards you can't see otherwise
+  const boardPick = useMemo(
+    () => pickIds.size > 0 && [...pickIds].every((id) => ["leader", "character", "stage"].includes(state.cards[id]?.zone) || (state.cards[id]?.zone === "hand" && state.cards[id].owner === ME)),
+    [pickIds, state],
+  );
   const pick = (id: string) => {
     if (!myPrompt) return;
     if (myPrompt.maxSelections === 1) send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [id] });
@@ -417,7 +429,8 @@ function Game({
           opponent
           press={pressCard}
           drop={drop}
-          litIds={battleIds}
+          litIds={new Set([...battleIds, ...pickIds])}
+          onIds={new Set(picked)}
           corner={
             <>
               <div className="who">
@@ -437,6 +450,7 @@ function Game({
           pressDon={myTurn ? pressDon : undefined}
           drop={drop}
           litIds={new Set([...battleIds, ...canAct, ...stepIds, ...pickIds])}
+          onIds={new Set(picked)}
           onDeck={step === "draw" ? draw : undefined}
           onDon={step === "don" ? takeDon : undefined}
           deckSplit={
@@ -468,6 +482,7 @@ function Game({
           cards={view.players[ME].hand}
           press={pressCard}
           litIds={battleStep ? stepIds : tray === "pick" ? pickIds : canAct}
+          onIds={new Set(picked)}
           dim={!!battleStep}
           counters={battleStep === "counter"}
           pos={handPos}
@@ -495,6 +510,51 @@ function Game({
               {o.label}
             </button>
           ))}
+        </div>
+      ) : boardPick && myPrompt ? (
+        <div className="battle-bar">
+          <span>
+            {myPrompt.sourceInstanceId && cardName(state.cards[myPrompt.sourceInstanceId].cardId)}
+            <small> {myPrompt.details || myPrompt.label}</small>
+          </span>
+          <span className="hint">
+            {myPrompt.maxSelections === 1 ? "Tap a lit card" : `Tap lit cards · ${picked.length}/${myPrompt.maxSelections}`}
+          </span>
+          {myPrompt.maxSelections > 1 && picked.length > 0 && (
+            <button className="ghost" onClick={() => setPicked([])}>Clear</button>
+          )}
+          {(myPrompt.maxSelections > 1 || myPrompt.minSelections === 0) && (
+            <button
+              disabled={picked.length < myPrompt.minSelections}
+              onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: picked })}
+            >
+              {picked.length === 0 ? (myPrompt.minSelections === 0 ? "None" : `Pick ${myPrompt.minSelections}`) : `Confirm ${picked.length}`}
+            </button>
+          )}
+        </div>
+      ) : quick && !battleStep ? (
+        <div className="battle-bar">
+          <span>
+            {quick.sourceInstanceId && cardName(state.cards[quick.sourceInstanceId].cardId)}
+            <small> {quick.details || quick.label}</small>
+          </span>
+          {quick.resolutionContext?.intent === "loopIterations" ? (
+            <>
+              <button className="ghost" onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: quick.id, iterations: 0 })}>Stop here</button>
+              <button onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: quick.id, iterations: 1 })}>Once more</button>
+            </>
+          ) : (
+            quick.options.map((o) => (
+              <button
+                key={o.id}
+                className={/^(no|skip|cancel|pass|decline|none|0)$/i.test(o.id) || /^(no|skip|cancel|pass|decline)\b/i.test(o.label) ? "ghost" : ""}
+                disabled={o.enabled === false}
+                onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: quick.id, optionId: o.id })}
+              >
+                {o.label}
+              </button>
+            ))
+          )}
         </div>
       ) : battle ? (
         <div className="battle-bar">
@@ -527,8 +587,8 @@ function Game({
       {showLog && <Log logs={view.logs} onClose={() => setShowLog(false)} />}
 
       {state.status === "setup" && <SetupSheet legal={legal} send={send} />}
-      {myPrompt && tray && !trigger && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} picked={picked} setPicked={setPicked} send={send} press={press} />}
-      {myPrompt && !tray && !battleStep && <PromptSheet key={myPrompt.id} prompt={myPrompt} state={state} send={send} />}
+      {myPrompt && tray && !trigger && !boardPick && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} picked={picked} setPicked={setPicked} send={send} press={press} />}
+      {myPrompt && !tray && !battleStep && !quick && <PromptSheet key={myPrompt.id} prompt={myPrompt} state={state} send={send} />}
       {preview && (!myPrompt || battleStep || trigger) && (
         <Preview
           group={preview.group}
