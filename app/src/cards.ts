@@ -32,3 +32,18 @@ export function cardCounter(cardId: string): number | null {
   const c = getCard(cardId);
   return "counter" in c && typeof c.counter === "number" ? c.counter : null;
 }
+
+const TIMINGS: Record<string, string> = {
+  onPlay: "On Play",
+  whenAttacking: "When Attacking",
+  onBlock: "On Block",
+  onKo: "On K.O.",
+  activateMain: "Activate: Main",
+  endOfYourTurn: "End of Your Turn",
+  endOfOpponentTurn: "End of Your Opponent's Turn",
+};
+
+// the engine names timings by their camelCase key; the card prints them in brackets
+export function timingName(trigger: string): string {
+  return TIMINGS[trigger] ?? trigger.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
+}

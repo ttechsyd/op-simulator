@@ -19,7 +19,7 @@ import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "
 import { BOT, DECKS, ME, localTable, newMatch, pendingPrompt, seatToShow, sitAt, useMatch, type DeckId, type Mode, type Table } from "./match";
 import { Lobby } from "./Lobby";
 import { forgetRoom } from "./net";
-import { cardImage, cardName } from "./cards";
+import { cardImage, cardName, timingName } from "./cards";
 import { Builder, DeckList, DeckView } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from "./decks";
 import { appReady, applyUpdate, bundleVersion, checkForUpdate, installApk, type Check } from "./update";
@@ -385,6 +385,14 @@ function Game({
   };
   const pressDon = (e: ReactPointerEvent) => press(e, { kind: "don" });
 
+  // a small face in the readout that opens the card big enough to read
+  const thumb = (id: string) => {
+    const c = state.cards[id];
+    const open = () =>
+      setPreview({ group: [{ instanceId: c.instanceId, cardId: c.cardId, name: cardName(c.cardId), owner: c.owner, zone: c.zone, rested: false, attachedDon: 0, lifeValue: null, power: null, cost: null, attribute: null, hidden: false }], start: 0 });
+    return <img className="thumb" src={cardImage(c.cardId)} alt="" onClick={open} />;
+  };
+
   const actionsFor = (c: ProjectedCard) =>
     c.owner === ME && c.instanceId ? potential.filter((a) => a.sourceId === c.instanceId) : [];
 
@@ -499,15 +507,7 @@ function Game({
 
       {trigger ? (
         <div className="battle-bar">
-          <img
-            className="thumb"
-            src={cardImage(state.cards[shownCard(trigger, state)].cardId)}
-            alt=""
-            onClick={() => {
-              const c = state.cards[shownCard(trigger, state)];
-              setPreview({ group: [{ instanceId: c.instanceId, cardId: c.cardId, name: cardName(c.cardId), owner: c.owner, zone: c.zone, rested: false, attachedDon: 0, lifeValue: null, power: null, cost: null, attribute: null, hidden: false }], start: 0 });
-            }}
-          />
+          {thumb(shownCard(trigger, state))}
           <span>
             {cardName(state.cards[shownCard(trigger, state)].cardId)}
             <small> {trigger.resolutionContext?.intent === "lifeTrigger" ? "has a [Trigger]" : trigger.details}</small>
@@ -541,9 +541,15 @@ function Game({
         </div>
       ) : quick && !battleStep ? (
         <div className="battle-bar">
+          {quick.sourceInstanceId && thumb(quick.sourceInstanceId)}
           <span>
             {quick.sourceInstanceId && cardName(state.cards[quick.sourceInstanceId].cardId)}
-            <small> {quick.details || quick.label}</small>
+            <small>
+              {" "}
+              {quick.resolutionContext?.intent === "effectOptional"
+                ? `[${timingName(String(quick.context.trigger))}] effect, use it?`
+                : quick.details || quick.label}
+            </small>
           </span>
           {quick.resolutionContext?.intent === "loopIterations" ? (
             <>
@@ -596,7 +602,7 @@ function Game({
       {state.status === "setup" && <SetupSheet legal={legal} send={send} />}
       {myPrompt && tray && !trigger && !boardPick && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} picked={picked} setPicked={setPicked} send={send} press={press} />}
       {myPrompt && !tray && !battleStep && !quick && <PromptSheet key={myPrompt.id} prompt={myPrompt} state={state} send={send} />}
-      {preview && (!myPrompt || battleStep || trigger) && (
+      {preview && (!myPrompt || battleStep || trigger || quick) && (
         <Preview
           group={preview.group}
           start={preview.start}
