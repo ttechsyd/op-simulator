@@ -36,7 +36,7 @@ export default function App() {
       ? { table: localTable(newMatch(mine, theirs, mode, Number(params.get("seed"))), mode), seat: "south" }
       : null,
   );
-  const [screen, setScreen] = useState<"menu" | "decks" | "lobby" | { view: Deck } | { edit: Deck }>("menu");
+  const [screen, setScreen] = useState<"menu" | "setup" | "decks" | "lobby" | { view: Deck } | { edit: Deck }>("menu");
   const [saved, setSaved] = useState(loadDecks);
   const [check, setCheck] = useState<Check | "checking" | null>(null);
   const [pct, setPct] = useState<number | null>(null);
@@ -67,7 +67,7 @@ export default function App() {
   }, []);
 
   if (!match && screen === "lobby") {
-    return <Lobby deck={mine} onBack={() => setScreen("menu")} onStart={(table, seat) => { setScreen("menu"); setMatch({ table, seat }); }} />;
+    return <Lobby deck={mine} onBack={() => setScreen("setup")} onStart={(table, seat) => { setScreen("menu"); setMatch({ table, seat }); }} />;
   }
   if (!match && screen === "decks") {
     return (
@@ -96,36 +96,43 @@ export default function App() {
   }
   if (!match) {
     const options = [...saved.map((d) => ({ id: `saved:${d.id}`, label: d.name })), ...DECKS];
-    return (
-      <div className="menu">
-        <h1>OP Sim</h1>
-        <label>
-          Mode
-          <select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-            <option value="bot">Player vs AI</option>
-            <option value="self">Solo, both sides</option>
-            <option value="online">Online with a friend</option>
-          </select>
-        </label>
-        <label>
-          {mode === "self" ? "Player 1 deck" : "Your deck"}
-          <select value={mine} onChange={(e) => setMine(e.target.value as DeckId)}>
-            {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-          </select>
-        </label>
-        {mode !== "online" && (
+    if (screen === "setup") {
+      return (
+        <div className="menu">
+          <h1>{mode === "bot" ? "Player vs AI" : mode === "self" ? "Solo, both sides" : "Online with a friend"}</h1>
           <label>
-            {mode === "self" ? "Player 2 deck" : "AI deck"}
-            <select value={theirs} onChange={(e) => setTheirs(e.target.value as DeckId)}>
+            {mode === "self" ? "Player 1 deck" : "Your deck"}
+            <select value={mine} onChange={(e) => setMine(e.target.value as DeckId)}>
               {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
             </select>
           </label>
-        )}
-        {mode === "online" ? (
-          <button onClick={() => setScreen("lobby")}>Find a game</button>
-        ) : (
-          <button onClick={() => setMatch({ table: localTable(newMatch(mine, theirs, mode), mode), seat: "south" })}>Play</button>
-        )}
+          {mode !== "online" && (
+            <label>
+              {mode === "self" ? "Player 2 deck" : "AI deck"}
+              <select value={theirs} onChange={(e) => setTheirs(e.target.value as DeckId)}>
+                {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+              </select>
+            </label>
+          )}
+          {mode === "online" ? (
+            <button onClick={() => setScreen("lobby")}>Find a game</button>
+          ) : (
+            <button onClick={() => setMatch({ table: localTable(newMatch(mine, theirs, mode), mode), seat: "south" })}>Play</button>
+          )}
+          <button className="ghost" onClick={() => setScreen("menu")}>Back</button>
+        </div>
+      );
+    }
+    const pick = (m: Mode) => {
+      setMode(m);
+      setScreen("setup");
+    };
+    return (
+      <div className="menu">
+        <h1>OP Sim</h1>
+        <button onClick={() => pick("bot")}>Player vs AI</button>
+        <button onClick={() => pick("self")}>Solo, both sides</button>
+        <button onClick={() => pick("online")}>Online with a friend</button>
         <button className="ghost" onClick={() => setScreen("decks")}>Decks</button>
         {release && (
           <div className="update">
