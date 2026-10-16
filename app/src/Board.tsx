@@ -68,13 +68,27 @@ function Don({ rested, press }: { rested?: boolean; press?: (e: ReactPointerEven
   return <div className={`don ${rested ? "rested" : ""} ${press ? "grab" : ""}`} onPointerDown={press} />;
 }
 
-function Life({ count }: { count: number }) {
+// life[0] is the top of the stack; a card turned face up by an effect stays visible
+function Life({ cards, press }: { cards: ProjectedCard[]; press?: Press }) {
+  const up = cards.filter((c) => !c.hidden);
   return (
-    <div className="life" style={{ height: 16 + Math.max(count - 1, 0) * 7 }}>
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="life-card" style={{ top: i * 7 }} />
+    <div className="life" style={{ height: 16 + Math.max(cards.length - 1, 0) * 7 }}>
+      {cards.map((c, i) => (
+        c.hidden ? (
+          <div key={i} className="life-card" style={{ top: i * 7, zIndex: cards.length - i }} />
+        ) : (
+          <div
+            key={c.instanceId ?? i}
+            className="life-card up"
+            style={{ top: i * 7, zIndex: cards.length - i }}
+            data-id={c.instanceId ?? undefined}
+            onPointerDown={press ? (e) => press(e, c, up) : undefined}
+          >
+            <img src={cardImage(c.cardId!)} alt="" draggable={false} />
+          </div>
+        )
       ))}
-      <span className="count">{count}</span>
+      <span className="count">{cards.length}</span>
     </div>
   );
 }
@@ -139,8 +153,8 @@ export function Seat({
   const trashTop = p.trash[p.trash.length - 1] ?? null;
   return (
     <div className={`seat ${opponent ? "opp" : "me"}`} data-drop={opponent ? undefined : "side"}>
-      <div className="z-life">
-        <Life count={p.lifeCount} />
+      <div className={`z-life ${opponent ? "" : dropClass("life", drop)}`} data-drop={opponent ? undefined : "life"}>
+        <Life cards={p.life} press={press} />
       </div>
 
       <div className="z-chars">
@@ -166,7 +180,7 @@ export function Seat({
       </div>
 
       <div className="z-piles">
-        <div className="pile deck">
+        <div className={`pile deck ${opponent ? "" : dropClass("deck", drop)}`} data-drop={opponent || deckSplit ? undefined : "deck"}>
           <div className="card back" />
           <span className="count">{p.deckCount}</span>
           {deckSplit &&
@@ -181,7 +195,7 @@ export function Seat({
               </div>
             ))}
         </div>
-        <div className="pile trash">
+        <div className={`pile trash ${opponent ? "" : dropClass("trash", drop)}`} data-drop={opponent ? undefined : "trash"}>
           <CardView card={trashTop} group={p.trash} press={press} />
           {p.trash.length > 0 && <span className="count">{p.trash.length}</span>}
         </div>

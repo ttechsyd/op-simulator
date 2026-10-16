@@ -10,7 +10,7 @@ import {
 import { Hand, Seat } from "./Board";
 import { GameOver, PromptSheet, SetupSheet } from "./Overlays";
 import { Preview } from "./Preview";
-import { Tray, trayMode } from "./Tray";
+import { Tray, pickTargets, trayMode } from "./Tray";
 import { Log } from "./Log";
 import { BattleArrow, useCardMotion } from "./anim";
 import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "./drag";
@@ -80,6 +80,16 @@ function Game({
   const prompt = pendingPrompt(state);
   const myPrompt = prompt?.seat === ME ? prompt : null;
   const tray = myPrompt ? trayMode(myPrompt) : null;
+  // a pick prompt can be answered on the table too: drag the card where the
+  // effect sends it (trash, deck, life) or onto the tray itself
+  const [picked, setPicked] = useState<string[]>([]);
+  useEffect(() => setPicked([]), [myPrompt?.id]);
+  const pickIds = useMemo(() => (tray === "pick" && myPrompt ? pickTargets(myPrompt) : new Set<string>()), [tray, myPrompt]);
+  const pick = (id: string) => {
+    if (!myPrompt) return;
+    if (myPrompt.maxSelections === 1) send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [id] });
+    else setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < myPrompt.maxSelections ? [...p, id] : p));
+  };
   // blocker and counter steps play out on the board: drag the card onto the attacker or the defender
   const intent = myPrompt?.resolutionContext?.intent;
   const battleStep = intent === "battleCounter" ? "counter" : intent === "battleBlocker" ? "block" : null;
@@ -163,6 +173,17 @@ function Game({
         targets: new Set([battleStep === "counter" ? `mine:${battle.targetId}` : `opp:${battle.attackerId}`]),
         drop: () => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [c.instanceId!] }),
       };
+    } else if (c.instanceId && pickIds.has(c.instanceId)) {
+      const action = String(myPrompt!.context.action ?? "");
+      const sink = /trash/i.test(action) ? "trash" : /deck/i.test(action) ? "deck" : /life/i.test(action) ? "life" : null;
+      source = {
+        kind: "free",
+        cardId: c.cardId,
+        targets: new Set(sink ? [sink, "tray"] : ["tray"]),
+        drop: () => pick(c.instanceId!),
+      };
+      press(e, source, () => pick(c.instanceId!));
+      return;
     } else if (c.owner === ME && c.zone === "hand") source = { kind: "hand", card: c };
     else if (c.owner === ME && (c.zone === "leader" || c.zone === "character")) source = { kind: "attacker", card: c };
     press(e, source, open);
@@ -212,7 +233,7 @@ function Game({
         press={pressCard}
         pressDon={myTurn ? pressDon : undefined}
         drop={drop}
-        litIds={new Set([...battleIds, ...canAct, ...stepIds])}
+        litIds={new Set([...battleIds, ...canAct, ...stepIds, ...pickIds])}
         deckSplit={
           tray === "place" && myPrompt
             ? (half) => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, optionId: half })
@@ -242,7 +263,7 @@ function Game({
             </button>
           </div>
         )}
-        <Hand cards={view.players[ME].hand} press={pressCard} litIds={battleStep ? stepIds : canAct} />
+        <Hand cards={view.players[ME].hand} press={pressCard} litIds={battleStep ? stepIds : tray === "pick" ? pickIds : canAct} />
       </div>
 
       <BattleArrow battle={battle} />
@@ -250,7 +271,7 @@ function Game({
       {showLog && <Log logs={view.logs} onClose={() => setShowLog(false)} />}
 
       {state.status === "setup" && <SetupSheet legal={legal} send={send} />}
-      {myPrompt && tray && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} send={send} press={press} />}
+      {myPrompt && tray && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} picked={picked} setPicked={setPicked} send={send} press={press} />}
       {myPrompt && !tray && !battleStep && <PromptSheet key={myPrompt.id} prompt={myPrompt} state={state} send={send} />}
       {preview && (!myPrompt || battleStep) && (
         <Preview

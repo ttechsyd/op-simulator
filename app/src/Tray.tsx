@@ -12,7 +12,7 @@ export type TrayMode = "pick" | "order" | "place" | "trigger";
 export function trayMode(p: PromptState): TrayMode | null {
   const rc = p.resolutionContext;
   if (rc?.intent === "battleCounter" || rc?.intent === "battleBlocker") return null;
-  if (p.choiceKind === "confirm" && rc?.intent === "lifeTrigger") return "trigger";
+  if (p.choiceKind === "confirm" && (rc?.intent === "lifeTrigger" || rc?.intent === "effectRevealFromLifePlay")) return "trigger";
   if (p.choiceKind === "chooseOption" && p.context.position === "topOrBottom") return "place";
   if (!p.options.length || !p.options.every((o) => o.targetId)) return null;
   if (p.choiceKind === "orderCards") return "order";
@@ -32,27 +32,44 @@ function placedIds(p: PromptState): string[] {
 
 export const DECK_KEYS = ["deck:top", "deck:bottom"];
 
+export function pickTargets(p: PromptState): Set<string> {
+  const s = new Set<string>();
+  for (const o of p.options) if (o.targetId && o.enabled !== false) s.add(o.targetId);
+  return s;
+}
+
+// the card a confirm-style prompt is about: the life card with the trigger, or the one just revealed
+export function shownCard(p: PromptState, state: MatchState): string {
+  const rc = p.resolutionContext;
+  if (rc?.intent === "effectRevealFromLifePlay") return state.players[rc.owner].life[0]!;
+  return p.sourceInstanceId!;
+}
+
 export function Tray({
   prompt,
   mode,
   state,
+  picked,
+  setPicked,
   send,
   press,
 }: {
   prompt: PromptState;
   mode: TrayMode;
   state: MatchState;
+  // picks live in App so dragging a hand card onto the trash counts as one too
+  picked: string[];
+  setPicked: (f: (p: string[]) => string[]) => void;
   send: (c: EngineCommand) => void;
   press: (e: ReactPointerEvent, source: DragSource, tap?: () => void) => void;
 }) {
   const base = { type: "resolvePrompt" as const, seat: ME, promptId: prompt.id };
-  const [picked, setPicked] = useState<string[]>([]);
   const [order, setOrder] = useState(() => prompt.options.map((o) => o.id));
   const [lifting, setLifting] = useState<{ id: string; x: number; y: number } | null>(null);
   const strip = useRef<HTMLDivElement>(null);
 
   const ids =
-    mode === "trigger" ? [prompt.sourceInstanceId!] : mode === "place" ? placedIds(prompt) : mode === "order" ? order : prompt.options.map((o) => o.id);
+    mode === "trigger" ? [shownCard(prompt, state)] : mode === "place" ? placedIds(prompt) : mode === "order" ? order : prompt.options.map((o) => o.id);
   const cardId = (id: string) => prompt.options.find((o) => o.id === id)?.targetId ?? id;
   const enabled = (id: string) => prompt.options.find((o) => o.id === id)?.enabled !== false;
 
@@ -122,11 +139,11 @@ export function Tray({
     pick: prompt.details,
     order: "Drag to order. Left is first.",
     place: "Drag onto the top or bottom of your deck.",
-    trigger: "This life card has a [Trigger].",
+    trigger: prompt.resolutionContext?.intent === "lifeTrigger" ? "This life card has a [Trigger]." : prompt.details,
   }[mode];
 
   return (
-    <div className={`tray ${mode}`}>
+    <div className={`tray ${mode}`} data-drop="tray">
       <div className="tray-head">
         {sourceName && <b>{sourceName}</b>}
         <span>{hint || prompt.label}</span>
@@ -169,7 +186,7 @@ export function Tray({
             <button disabled={picked.length < prompt.minSelections} onClick={() => send({ ...base, selectedIds: picked })}>
               {picked.length === 0 ? (prompt.minSelections === 0 ? "Take none" : `Pick ${prompt.minSelections}`) : `Confirm ${picked.length}/${prompt.maxSelections}`}
             </button>
-            {picked.length > 0 && <button className="ghost" onClick={() => setPicked([])}>Clear</button>}
+            {picked.length > 0 && <button className="ghost" onClick={() => setPicked(() => [])}>Clear</button>}
           </>
         )}
         {mode === "order" && <button onClick={() => send({ ...base, selectedIds: order })}>Done</button>}
