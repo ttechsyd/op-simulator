@@ -15,25 +15,34 @@ import {
   type TestDeckId,
 } from "@tcg/op-engine";
 
+import { loadDecks, mainDeckList, preconDecks } from "./decks";
+
 export const ME: MatchSeat = "south";
 export const BOT: MatchSeat = "north";
 
-export type DeckId = "st01" | TestDeckId;
+// "saved:<id>" is one of the user's decks, "pre:<code>" an official starter, the rest are the engine's test decks
+export type DeckId = string;
 
 export const DECKS: { id: DeckId; label: string }[] = [
-  { id: "st01", label: "ST01 Straw Hat Crew" },
-  { id: "red-aggro", label: "Red aggro (Zoro)" },
-  { id: "blue-control", label: "Blue control" },
-  { id: "green-midrange", label: "Green midrange" },
-  { id: "purple-ramp", label: "Purple ramp" },
-  { id: "black-removal", label: "Black removal" },
-  { id: "yellow-trigger", label: "Yellow trigger" },
+  ...preconDecks.map((d) => ({ id: d.id, label: d.label })),
+  { id: "red-aggro", label: "Test: red aggro (Zoro)" },
+  { id: "blue-control", label: "Test: blue control" },
+  { id: "green-midrange", label: "Test: green midrange" },
+  { id: "purple-ramp", label: "Test: purple ramp" },
+  { id: "black-removal", label: "Test: black removal" },
+  { id: "yellow-trigger", label: "Test: yellow trigger" },
 ];
 
 function playerConfig(deck: DeckId, playerName: string): MatchPlayerConfig {
-  if (deck === "st01") return createSt01PlayerConfig(playerName);
-  const d = TEST_DECKS[deck];
-  return { leaderCardId: d.leaderId, mainDeck: [...d.mainDeck], donDeckCount: 10, playerName };
+  if (deck.startsWith("saved:")) {
+    const d = loadDecks().find((x) => x.id === deck.slice(6));
+    if (d?.leader) return { leaderCardId: d.leader, mainDeck: mainDeckList(d), donDeckCount: 10, playerName };
+  }
+  const pre = preconDecks.find((d) => d.id === deck);
+  if (pre) return { leaderCardId: pre.leader, mainDeck: [...pre.mainDeck], donDeckCount: 10, playerName };
+  const test = TEST_DECKS[deck as TestDeckId];
+  if (test) return { leaderCardId: test.leaderId, mainDeck: [...test.mainDeck], donDeckCount: 10, playerName };
+  return createSt01PlayerConfig(playerName);
 }
 
 export function newMatch(mine: DeckId, theirs: DeckId, seed = Date.now()): MatchState {

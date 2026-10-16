@@ -16,16 +16,20 @@ import { BattleArrow, useCardMotion } from "./anim";
 import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "./drag";
 import { BOT, DECKS, ME, newMatch, pendingPrompt, useMatch, type DeckId } from "./match";
 import { cardName } from "./cards";
+import { Builder, DeckList } from "./Builder";
+import { deleteDeck, loadDecks, newDeck, type Deck } from "./decks";
 
 // ?seed=123&mine=red-aggro&theirs=st01 skips the menu, handy for replaying a hand
 const params = new URLSearchParams(location.search);
 
 export default function App() {
-  const [mine, setMine] = useState<DeckId>((params.get("mine") as DeckId) ?? "st01");
-  const [theirs, setTheirs] = useState<DeckId>((params.get("theirs") as DeckId) ?? "red-aggro");
+  const [mine, setMine] = useState<DeckId>(params.get("mine") ?? "pre:ST01");
+  const [theirs, setTheirs] = useState<DeckId>(params.get("theirs") ?? "red-aggro");
   const [match, setMatch] = useState<MatchState | null>(() =>
     params.has("seed") ? newMatch(mine, theirs, Number(params.get("seed"))) : null,
   );
+  const [screen, setScreen] = useState<"menu" | "decks" | Deck>("menu");
+  const [saved, setSaved] = useState(loadDecks);
   // the running Game swaps in its own handler; false means "nothing to close, leave the app"
   const onBack = useRef<() => boolean>(() => false);
 
@@ -38,23 +42,39 @@ export default function App() {
     };
   }, []);
 
+  if (!match && screen === "decks") {
+    return (
+      <DeckList
+        decks={saved}
+        onBack={() => setScreen("menu")}
+        onNew={() => setScreen(newDeck())}
+        onEdit={(d) => setScreen(d)}
+        onDelete={(d) => { deleteDeck(d.id); setSaved(loadDecks()); }}
+      />
+    );
+  }
+  if (!match && typeof screen === "object") {
+    return <Builder initial={screen} onDone={() => { setSaved(loadDecks()); setScreen("decks"); }} />;
+  }
   if (!match) {
+    const options = [...saved.map((d) => ({ id: `saved:${d.id}`, label: d.name })), ...DECKS];
     return (
       <div className="menu">
         <h1>OP Sim</h1>
         <label>
           Your deck
           <select value={mine} onChange={(e) => setMine(e.target.value as DeckId)}>
-            {DECKS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+            {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
           </select>
         </label>
         <label>
           Bot deck
           <select value={theirs} onChange={(e) => setTheirs(e.target.value as DeckId)}>
-            {DECKS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+            {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
           </select>
         </label>
         <button onClick={() => setMatch(newMatch(mine, theirs))}>Play</button>
+        <button className="ghost" onClick={() => setScreen("decks")}>Decks</button>
       </div>
     );
   }

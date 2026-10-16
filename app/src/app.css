@@ -420,3 +420,51 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 }
 .battle-bar .hint { margin: 0; color: var(--muted); font-weight: 400; font-size: 11px; }
 .battle-bar button { min-height: 28px; padding: 2px 10px; font-size: 12px; }
+
+/* deck builder */
+.builder, .decklist {
+  height: 100%; display: grid; grid-template-columns: 1fr minmax(240px, 30%); grid-template-rows: auto 1fr;
+  padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px, env(safe-area-inset-left));
+  gap: 6px 8px;
+}
+.decklist { grid-template-columns: 1fr; }
+.b-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding-top: 4px; min-height: 44px; }
+.b-head h2 { margin: 0; font-size: 16px; flex: 1; }
+.b-name { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid #3e556b; border-radius: 8px; padding: 6px 10px; width: 160px; }
+.b-leader { display: flex; align-items: center; gap: 8px; padding: 2px 10px 2px 2px; min-height: 36px; }
+.b-leader img, .b-leader .card.slot { width: 26px; aspect-ratio: 0.716; border-radius: 3px; display: block; }
+.b-leader.on { border-color: var(--accent); }
+.b-count { font-weight: 700; color: var(--muted); }
+.b-count.ok { color: #7ee787; }
+.b-problems { flex: 1; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.b-browse { display: flex; flex-direction: column; min-height: 0; gap: 6px; }
+.b-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.b-filters input { font: inherit; font-size: 13px; color: var(--ink); background: var(--panel); border: 1px solid #3e556b; border-radius: 8px; padding: 5px 9px; width: 200px; }
+.chip { min-height: 26px; padding: 2px 8px; font-size: 11px; border-radius: 13px; background: #223240; text-transform: capitalize; }
+.chip.on { background: var(--ink); color: #111; border-color: var(--ink); }
+.chip.red.on { background: #d33; color: #fff; } .chip.green.on { background: #2a9d4f; color: #fff; } .chip.blue.on { background: #2f7fd6; color: #fff; }
+.chip.purple.on { background: #7d4bc9; color: #fff; } .chip.black.on { background: #222; color: #fff; } .chip.yellow.on { background: #f2c94c; color: #111; }
+.b-found { margin-left: auto; font-size: 11px; color: var(--muted); }
+.b-grid {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; align-content: start;
+  padding-bottom: 8px;
+}
+.b-card { position: relative; border-radius: 6px; }
+.b-card img { width: 100%; aspect-ratio: 0.716; object-fit: cover; border-radius: 6px; display: block; background: #1b2430; }
+.b-card.in img { outline: 2px solid var(--lit); }
+.b-n { position: absolute; top: 4px; left: 4px; background: var(--lit); color: #111; font-weight: 700; font-size: 12px; padding: 0 7px; border-radius: 9px; }
+.b-add { position: absolute; right: 4px; bottom: 4px; min-height: 30px; min-width: 30px; padding: 0 8px; font-weight: 700; background: rgba(0,0,0,0.7); }
+.b-more { grid-column: 1 / -1; }
+.b-list { min-height: 0; overflow-y: auto; background: var(--zone); border: 1px solid var(--zone-line); border-radius: 8px; padding: 4px; }
+.b-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.b-row b { width: 26px; }
+.b-cost { width: 18px; height: 18px; border-radius: 9px; background: #000; color: #fff; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; }
+.b-rowname { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.b-row small { color: var(--muted); font-size: 10px; }
+.pv-n { align-self: center; font-size: 13px; color: var(--muted); }
+.dl-body { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.dl-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; background: var(--zone); border: 1px solid var(--zone-line); border-radius: 8px; }
+.dl-row img, .dl-row .card.slot { width: 40px; aspect-ratio: 0.716; border-radius: 4px; display: block; }
+.dl-row > div { flex: 1; display: flex; flex-direction: column; }
+.dl-row small { color: var(--muted); }
