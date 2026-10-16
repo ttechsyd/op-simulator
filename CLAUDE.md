@@ -43,7 +43,7 @@ because both seats live in the same process (undo snapshots, bot timers) stays i
 ## Working from a fresh clone (cloud sessions too)
 
 `scripts/setup.sh` does everything: submodule, engine deps and build, app deps and build.
-Type-check with `npx tsc --noEmit -p app`. Pushes to `main` that touch `app/` make
+Type-check with `app/node_modules/.bin/tsc --noEmit -p app` (npx may pick a newer typescript). Pushes to `main` that touch `app/` make
 `.github/workflows/bundle.yml` publish a release the phone installs from its menu; native
 changes (plugins, manifest, gradle) ship as `opsim.apk` on the same release. The signing key
 lives in the repo secrets and in `app/android/keystore.properties` locally, never in git.

@@ -15,7 +15,6 @@
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
-    "baseUrl": ".",
     "paths": {
       "@tcg/engine-core/test-simulator": [
         "./src/types/engine-core-test-simulator.d.ts"
