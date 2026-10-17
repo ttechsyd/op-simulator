@@ -6,7 +6,9 @@ import { retryArt } from "./decks";
 
 // a press is a tap or the start of a drag; the game decides which, and gets the
 // group the card sits in so a tap can open the strip on it
-export type Press = (e: ReactPointerEvent, card: ProjectedCard, group: ProjectedCard[]) => void;
+// `at` reports which card the pointer is over right now; the hand lets a finger slide
+// along the fan before it commits, so the card that was first touched may not be the one meant
+export type Press = (e: ReactPointerEvent, card: ProjectedCard, group: ProjectedCard[], at?: () => ProjectedCard) => void;
 
 export interface Drop {
   ok: Set<string>;
@@ -302,27 +304,79 @@ export function Hand({
 }) {
   const n = cards.length;
   const step = Math.min(60, n > 1 ? (900 - 80) / (n - 1) : 60);
+  const fan = useRef<HTMLDivElement>(null);
+  // the card under the finger while it slides along the fan; it rises so you can read it
+  const [peek, setPeek] = useState<string | null>(null);
+  const peeking = useRef<ProjectedCard | null>(null);
+  const slid = useRef(false);
+
+  const under = (x: number) => {
+    const els = fan.current?.querySelectorAll<HTMLElement>(".card") ?? [];
+    let hit: ProjectedCard | null = null;
+    // later cards overlap earlier ones, so the last match wins
+    els.forEach((el, i) => {
+      const r = el.getBoundingClientRect();
+      if (x >= r.left && x <= r.right) hit = cards[i];
+    });
+    return hit;
+  };
+
+  const touch = (e: ReactPointerEvent, c: ProjectedCard) => {
+    if (e.button !== 0 || c.hidden || !c.cardId) return;
+    const settle = (card: ProjectedCard | null) => {
+      peeking.current = card;
+      setPeek(card?.instanceId ?? null);
+    };
+    settle(c);
+    const finger = e.pointerType !== "mouse";
+    if (finger) onLift(true);
+    const move = (ev: PointerEvent) => settle(under(ev.clientX));
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      settle(null);
+      // the browser's click for this gesture lands on the fan itself; it isn't a tap on the felt
+      slid.current = true;
+      if (finger) onLift(false);
+    };
+    // the press goes first so its tap still sees which card the finger ended on
+    press(e, c, cards, () => peeking.current ?? c);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
+
   return (
     <div
       className={`hand ${pos}`}
-      onClick={(e) => e.target === e.currentTarget && onLift("toggle")}
+      ref={fan}
+      onClick={(e) => {
+        if (slid.current) slid.current = false;
+        else if (e.target === e.currentTarget) onLift("toggle");
+      }}
       onPointerEnter={(e) => e.pointerType === "mouse" && onLift(true)}
       onPointerLeave={(e) => e.pointerType === "mouse" && onLift(false)}
     >
       {cards.map((c, i) => {
         const off = i - (n - 1) / 2;
         const lit = !!c.instanceId && !!litIds?.has(c.instanceId);
+        const up = !!c.instanceId && c.instanceId === peek && pos !== "tuck";
         return (
           <CardView
             key={c.instanceId ?? i}
             card={c}
             group={cards}
-            press={press}
+            press={touch}
             lit={lit}
             on={!!c.instanceId && !!onIds?.has(c.instanceId)}
             dim={dim && !lit}
             marks={c.instanceId ? marks?.get(c.instanceId) : undefined}
-            style={{ marginLeft: i ? step - 80 : 0, transform: `rotate(${off * 3}deg) translateY(${Math.abs(off) * 3}px)` }}
+            style={{
+              marginLeft: i ? step - 80 : 0,
+              transform: up ? "translateY(-54px) scale(1.35)" : `rotate(${off * 3}deg) translateY(${Math.abs(off) * 3}px)`,
+              zIndex: up ? 5 : undefined,
+            }}
           />
         );
       })}

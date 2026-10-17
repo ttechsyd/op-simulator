@@ -371,31 +371,37 @@ function Game({
     return s;
   }, [battle]);
 
-  const pressCard = (e: ReactPointerEvent, c: ProjectedCard, group: ProjectedCard[]) => {
-    if (c.hidden || !c.cardId) return;
-    const open = () => setPreview({ group, start: group.indexOf(c) });
-    let source: DragSource = { kind: "look", card: c };
-    if (battleStep && myPrompt && battle && c.instanceId && stepIds.has(c.instanceId)) {
-      source = {
+  const sourceFor = (c: ProjectedCard): DragSource => {
+    if (battleStep && myPrompt && battle && c.instanceId && stepIds.has(c.instanceId))
+      return {
         kind: "free",
-        cardId: c.cardId,
+        cardId: c.cardId!,
         targets: new Set([battleStep === "counter" ? `mine:${battle.targetId}` : `opp:${battle.attackerId}`]),
         drop: () => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [c.instanceId!] }),
       };
-    } else if (c.instanceId && pickIds.has(c.instanceId)) {
+    if (c.instanceId && pickIds.has(c.instanceId)) {
       const action = String(myPrompt!.context.action ?? "");
       const sink = /trash/i.test(action) ? "trash" : /deck/i.test(action) ? "deck" : /life/i.test(action) ? "life" : null;
-      source = {
-        kind: "free",
-        cardId: c.cardId,
-        targets: new Set(sink ? [sink, "tray"] : ["tray"]),
-        drop: () => pick(c.instanceId!),
-      };
-      press(e, source, () => pick(c.instanceId!));
-      return;
-    } else if (c.owner === ME && c.zone === "hand") source = { kind: "hand", card: c };
-    else if (c.owner === ME && (c.zone === "leader" || c.zone === "character")) source = { kind: "attacker", card: c };
-    press(e, source, open);
+      return { kind: "free", cardId: c.cardId!, targets: new Set(sink ? [sink, "tray"] : ["tray"]), drop: () => pick(c.instanceId!) };
+    }
+    if (c.owner === ME && c.zone === "hand") return { kind: "hand", card: c };
+    if (c.owner === ME && (c.zone === "leader" || c.zone === "character")) return { kind: "attacker", card: c };
+    return { kind: "look", card: c };
+  };
+  const pressCard = (e: ReactPointerEvent, c: ProjectedCard, group: ProjectedCard[], at?: () => ProjectedCard) => {
+    if (c.hidden || !c.cardId) return;
+    const now = () => at?.() ?? c;
+    press(
+      e,
+      () => sourceFor(now()),
+      () => {
+        const card = now();
+        // a card lit for a pick is picked by the tap itself; anything else opens to read
+        if (card.instanceId && pickIds.has(card.instanceId) && !battleStep) pick(card.instanceId);
+        else setPreview({ group, start: group.indexOf(card) });
+      },
+      !!at,
+    );
   };
   const pressDon = (e: ReactPointerEvent) => press(e, { kind: "don" });
 

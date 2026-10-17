@@ -88,12 +88,18 @@ export function useDrag(
     }
   };
 
-  // one handler for both tapping and dragging: a short press without movement is a tap
-  const press = (e: ReactPointerEvent, source: DragSource, tap?: () => void) => {
+  // one handler for both tapping and dragging: a short press without movement is a tap.
+  // The source can be a function: the hand resolves it late, to whichever card the finger
+  // slid onto, and a hand card only starts dragging when pulled upward, so sliding
+  // along the fan stays a browse.
+  const press = (e: ReactPointerEvent, from: DragSource | (() => DragSource), tap?: () => void, sliding = false) => {
     if (e.button !== 0) return;
     const sx = e.clientX;
     const sy = e.clientY;
-    const targets = targetsFor(source);
+    const resolve = () => (typeof from === "function" ? from() : from);
+    const fromHand = sliding || resolve().kind === "hand";
+    let source = resolve();
+    let targets = new Set<string>();
     let dragging = false;
 
     const keyUnder = (x: number, y: number) => {
@@ -106,9 +112,11 @@ export function useDrag(
       const dx = ev.clientX - sx;
       const dy = ev.clientY - sy;
       if (!dragging) {
-        if (Math.hypot(dx, dy) < 10) return;
+        if (fromHand ? !(dy < -24 && -dy > Math.abs(dx) / 2) : Math.hypot(dx, dy) < 10) return;
+        source = resolve();
+        targets = targetsFor(source);
         if (targets.size === 0) {
-          stop();
+          if (!fromHand) stop();
           return;
         }
         dragging = true;
