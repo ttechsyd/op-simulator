@@ -1,0 +1,234 @@
+diff --git a/submodules/one-piece/packages/engine/src/effects/permanent.ts b/submodules/one-piece/packages/engine/src/effects/permanent.ts
+index 869d7223..5982889f 100644
+--- a/submodules/one-piece/packages/engine/src/effects/permanent.ts
++++ b/submodules/one-piece/packages/engine/src/effects/permanent.ts
+@@ -7,7 +7,7 @@ import type { Action, Condition, EffectTrigger, Keyword } from "@tcg/op-types";
+ import type { CardInstance, MatchState } from "../types.ts";
+ import { getSetBasePower } from "../shared.ts";
+ import { evaluateConditions } from "./conditions.ts";
+-import { candidatePoolForTarget, matchesTargetFilter } from "./targeting.ts";
++import { candidatePoolForTarget, matchesTargetFilter, targetReaches } from "./targeting.ts";
+ 
+ const excludedPowerSetters = new WeakMap<MatchState, ReadonlySet<string>>();
+ export function evaluatingLegacyBasePower(state: MatchState): boolean {
+@@ -472,13 +472,7 @@ function effectsNegatedByPermanentEffect(
+             }
+           }
+           if (action.action === "negateEffects") {
+-            const pool = candidatePoolForTarget(
+-              state,
+-              source.controller,
+-              source.instanceId,
+-              action.target,
+-            );
+-            if (!pool.supported || !pool.candidateIds.includes(targetInstanceId)) continue;
++            if (!targetReaches(state, source.controller, source.instanceId, action.target, targetInstanceId)) continue;
+             if (!action.effectTypes?.length || (trigger && action.effectTypes.includes(trigger))) {
+               return true;
+             }
+@@ -531,13 +525,7 @@ export function isCharacterRemovalPreventedByPermanentEffect(
+           (action.bySource === "ownEffect" && source.controller === effectController) ||
+           (action.bySource === "opponentEffect" && source.controller !== effectController);
+         if (!sourceMatches) continue;
+-        const pool = candidatePoolForTarget(
+-          state,
+-          source.controller,
+-          source.instanceId,
+-          action.target,
+-        );
+-        if (pool.supported && pool.candidateIds.includes(targetInstanceId)) return true;
++        if (targetReaches(state, source.controller, source.instanceId, action.target, targetInstanceId)) return true;
+       }
+     }
+   }
+@@ -949,13 +937,7 @@ export function getPermanentModifierTotal(
+             continue;
+           }
+ 
+-          const pool = candidatePoolForTarget(
+-            state,
+-            source.controller,
+-            source.instanceId,
+-            action.target,
+-          );
+-          if (pool.supported && pool.candidateIds.includes(targetInstanceId)) {
++          if (targetReaches(state, source.controller, source.instanceId, action.target, targetInstanceId)) {
+             const restedDonGroupSize =
+               action.action === "modifyPower" ? action.restedDonGroupSize : undefined;
+             const valuePerCardGroup =
+@@ -1066,13 +1048,7 @@ export function getPermanentSetBasePower(
+             ]);
+             if (!condition.supported || !condition.matches) continue;
+           }
+-          const targetPool = candidatePoolForTarget(
+-            state,
+-            source.controller,
+-            source.instanceId,
+-            action.target,
+-          );
+-          if (!targetPool.supported || !targetPool.candidateIds.includes(targetInstanceId)) {
++          if (!targetReaches(state, source.controller, source.instanceId, action.target, targetInstanceId)) {
+             continue;
+           }
+           if (action.action === "setBasePower") {
+@@ -1150,13 +1126,7 @@ export function getPermanentSetBaseCost(
+             action.condition ? [action.condition] : [],
+           );
+           if (!condition.supported || !condition.matches) continue;
+-          const targets = candidatePoolForTarget(
+-            state,
+-            source.controller,
+-            source.instanceId,
+-            action.target,
+-          );
+-          if (targets.supported && targets.candidateIds.includes(targetInstanceId))
++          if (targetReaches(state, source.controller, source.instanceId, action.target, targetInstanceId))
+             result = result === null ? action.value : Math.max(result, action.value);
+         }
+       }
+@@ -1213,13 +1183,7 @@ export function getPermanentSetCost(state: MatchState, targetInstanceId: string)
+           action.condition ? [action.condition] : [],
+         );
+         if (!actionCondition.supported || !actionCondition.matches) continue;
+-        const pool = candidatePoolForTarget(
+-          state,
+-          source.controller,
+-          source.instanceId,
+-          action.target,
+-        );
+-        if (pool.supported && pool.candidateIds.includes(targetInstanceId)) {
++        if (targetReaches(state, source.controller, source.instanceId, action.target, targetInstanceId)) {
+           return action.value;
+         }
+       }
+@@ -1274,13 +1238,7 @@ export function getPermanentSetCounter(state: MatchState, targetInstanceId: stri
+             ]);
+             if (!result.supported || !result.matches) continue;
+           }
+-          const pool = candidatePoolForTarget(
+-            state,
+-            source.controller,
+-            source.instanceId,
+-            action.target,
+-          );
+-          if (pool.supported && pool.candidateIds.includes(targetInstanceId)) {
++          if (targetReaches(state, source.controller, source.instanceId, action.target, targetInstanceId)) {
+             value = value === null ? action.value : Math.max(value, action.value);
+           }
+         }
+@@ -1346,13 +1304,7 @@ export function getPermanentKeywords(state: MatchState, targetInstanceId: string
+           if (action.target.count.amount !== "all" && !action.target.self) {
+             continue;
+           }
+-          const pool = candidatePoolForTarget(
+-            state,
+-            source.controller,
+-            source.instanceId,
+-            action.target,
+-          );
+-          if (pool.supported && pool.candidateIds.includes(targetInstanceId)) {
++          if (targetReaches(state, source.controller, source.instanceId, action.target, targetInstanceId)) {
+             keywords.add(action.keyword);
+           }
+         }
+@@ -1416,13 +1368,7 @@ export function isAttackPreventedByPermanentEffect(
+           if (action.target.count.amount !== "all" && !action.target.self) {
+             continue;
+           }
+-          const pool = candidatePoolForTarget(
+-            state,
+-            source.controller,
+-            source.instanceId,
+-            action.target,
+-          );
+-          if (pool.supported && pool.candidateIds.includes(targetInstanceId)) {
++          if (targetReaches(state, source.controller, source.instanceId, action.target, targetInstanceId)) {
+             return true;
+           }
+         }
+@@ -1483,13 +1429,7 @@ export function canAttackActiveByPermanentEffect(
+               continue;
+             }
+           }
+-          const pool = candidatePoolForTarget(
+-            state,
+-            source.controller,
+-            source.instanceId,
+-            action.target,
+-          );
+-          if (pool.supported && pool.candidateIds.includes(targetInstanceId)) {
++          if (targetReaches(state, source.controller, source.instanceId, action.target, targetInstanceId)) {
+             return true;
+           }
+         }
+@@ -1647,13 +1587,7 @@ export function isRefreshPreventedByPermanentEffect(
+           if (action.action !== "freeze") {
+             continue;
+           }
+-          const pool = candidatePoolForTarget(
+-            state,
+-            source.controller,
+-            source.instanceId,
+-            action.target,
+-          );
+-          if (pool.supported && pool.candidateIds.includes(targetInstanceId)) {
++          if (targetReaches(state, source.controller, source.instanceId, action.target, targetInstanceId)) {
+             return true;
+           }
+         }
+diff --git a/submodules/one-piece/packages/engine/src/effects/targeting.ts b/submodules/one-piece/packages/engine/src/effects/targeting.ts
+index 01a962ed..40cd4f91 100644
+--- a/submodules/one-piece/packages/engine/src/effects/targeting.ts
++++ b/submodules/one-piece/packages/engine/src/effects/targeting.ts
+@@ -355,6 +355,24 @@ export function selectionSatisfiesTotalConstraint(
+   }
+ }
+ 
++// Whether one card is in a target's reach. Filters are asked about that card alone: a filter
++// on a value the asking effect feeds (Linlin sets base power by base power) would otherwise
++// re-read every other candidate, and each of those reads every other one again.
++export function targetReaches(
++  state: MatchState,
++  controller: MatchSeat,
++  sourceInstanceId: string | null,
++  target: Target,
++  instanceId: string,
++): boolean {
++  const pool = candidatePoolForTarget(state, controller, sourceInstanceId, { ...target, filters: undefined });
++  if (!pool.candidateIds.includes(instanceId)) return false;
++  return (target.filters ?? []).every((filter) => {
++    const result = matchesTargetFilter(state, sourceInstanceId, instanceId, filter);
++    return result.supported && result.matches;
++  });
++}
++
+ export function candidatePoolForTarget(
+   state: MatchState,
+   controller: MatchSeat,
+diff --git a/submodules/one-piece/packages/engine/tests/rules/06-base-power-fan-out.test.ts b/submodules/one-piece/packages/engine/tests/rules/06-base-power-fan-out.test.ts
+new file mode 100644
+index 00000000..3c9e47cf
+--- /dev/null
++++ b/submodules/one-piece/packages/engine/tests/rules/06-base-power-fan-out.test.ts
+@@ -0,0 +1,21 @@
++import { expect, test } from "vite-plus/test";
++import { OnePieceTestEngine } from "../../src/index.ts";
++
++// Charlotte Linlin (OP17-112) sets the base power of Characters by their base power. Each
++// check used to re-read every other Character's base power, and those every other one's.
++test("playing Charlotte Linlin beside trigger Characters settles at once", () => {
++  const e = OnePieceTestEngine.create(
++    {
++      leaderCardId: "OP09-062",
++      character: ["OP04-106", "OP04-108", "OP04-067", "OP05-073"],
++      hand: ["OP17-112"],
++      activeDon: 10,
++    },
++    { leaderCardId: "OP16-079", character: ["OP04-106", "OP04-108", "OP04-067", "OP05-073", "OP04-069"] },
++  );
++  const started = performance.now();
++  e.asSouth().play("OP17-112");
++  expect(performance.now() - started).toBeLessThan(2000);
++  const bavarois = e.getView("south").players.south.characters.find((c) => c?.cardId === "OP04-106");
++  expect(bavarois?.power).toBe(8000);
++});

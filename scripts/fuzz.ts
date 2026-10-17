@@ -32,6 +32,7 @@ type FlagKind =
   | "blankName"
   | "noTarget"
   | "oncePerTurn"
+  | "donCount"
   | "hang";
 
 type Flag = {
@@ -54,6 +55,8 @@ const rounds = Number(opt("rounds", "6"));
 const maxTurns = Number(opt("turns", "40"));
 const baseSeed = Number(opt("seed", "1"));
 const onlyPair = opt("pair", "");
+// replays one game from a report exactly: --pair "<south>,<north>" --game <seed>
+const oneGame = opt("game", "");
 const outFile = opt("out", "scripts/fuzz-report.json");
 const dumpLogs = args.includes("--log");
 const trace = args.includes("--trace");
@@ -194,6 +197,14 @@ function play(south: Deck, north: Deck, seed: number): GameResult {
     });
 
   let seenLogs = state.logHistory.length;
+  // DON!! moves between the deck, the cost area and the cards but never appears or vanishes
+  const donOf = (seat: "south" | "north") => {
+    const p = state.players[seat];
+    let on = 0;
+    for (const c of Object.values(state.cards)) if (c.controller === seat) on += c.attachedDon;
+    return p.activeDon + p.restedDon + p.donDeckCount + on;
+  };
+  const donTotal = { south: donOf("south"), north: donOf("north") };
   let seenIssues = state.capabilityHistory.length;
   let idle = 0;
   let stale = new Map<string, string[]>();
@@ -245,7 +256,9 @@ function play(south: Deck, north: Deck, seed: number): GameResult {
       break;
     }
     if (!result.accepted) {
-      flag("rejected", cardsIn(state, cmd), `${cmd.type} rejected: ${result.reason}`);
+      const asked = cmd.type === "resolvePrompt" ? state.promptQueue.find((q) => q.id === cmd.promptId) : null;
+      const shape = asked ? ` (${asked.choiceKind} ${asked.minSelections}-${asked.maxSelections} of ${asked.options.length}, sent ${JSON.stringify(cmd.selectedIds ?? cmd.optionId)})` : "";
+      flag("rejected", cardsIn(state, cmd), `${cmd.type} rejected: ${result.reason}${shape}`);
       break;
     }
 
@@ -291,6 +304,13 @@ function play(south: Deck, north: Deck, seed: number): GameResult {
       }
     }
     seenLogs = state.logHistory.length;
+
+    for (const seat of ["south", "north"] as const) {
+      const now = donOf(seat);
+      if (now === donTotal[seat]) continue;
+      flag("donCount", cardsIn(state, cmd), `${seat} has ${now} DON!! in all, was ${donTotal[seat]}, after ${JSON.stringify(cmd)}`);
+      donTotal[seat] = now;
+    }
   }
 
   return { flags, turns: state.turnNumber, finished: state.status === "finished", log: state.logHistory.map((l) => l.message) };
@@ -334,7 +354,8 @@ for (const [pi, [a, b]] of pairs.entries()) {
     tasks.push({ pi, si: decks.indexOf(south), ni: decks.indexOf(north), seed: baseSeed * 10007 + pi * 101 + r });
   }
 }
-const left = pairs.map(() => rounds);
+if (oneGame) tasks.splice(0, tasks.length, { pi: 0, si: decks.indexOf(pairs[0][0]), ni: decks.indexOf(pairs[0][1]), seed: Number(oneGame) });
+const left = pairs.map(() => (oneGame ? 1 : rounds));
 const pairFlags = pairs.map(() => 0);
 const record = (task: Task, game: GameResult) => {
   const [south, north] = [decks[task.si], decks[task.ni]];
@@ -346,7 +367,7 @@ const record = (task: Task, game: GameResult) => {
   if (dumpLogs) console.log(`\n--- seed ${task.seed}: ${south.name} (south) vs ${north.name} (north)\n${game.log.join("\n")}`);
   if (--left[task.pi] === 0) {
     const [a, b] = pairs[task.pi];
-    console.log(`${a.name} vs ${b.name}: ${rounds} games, ${pairFlags[task.pi]} flags`);
+    console.log(`${a.name} vs ${b.name}: ${oneGame ? 1 : rounds} games, ${pairFlags[task.pi]} flags`);
   }
 };
 
@@ -408,7 +429,9 @@ const slot = async () => {
 };
 
 let next = 0;
-await Promise.all(Array.from({ length: Math.min(jobs, tasks.length) }, slot));
+// --inline plays on this thread instead, so a debugger attached with --inspect can pause a hang
+if (args.includes("--inline")) for (const task of tasks) record(task, play(decks[task.si], decks[task.ni], task.seed));
+else await Promise.all(Array.from({ length: Math.min(jobs, tasks.length) }, slot));
 
 const unique = new Map<string, Flag & { count: number }>();
 for (const f of all) {
@@ -418,7 +441,7 @@ for (const f of all) {
   else unique.set(key, { ...f, count: 1 });
 }
 
-const kinds: FlagKind[] = ["hang", "exception", "rejected", "stuck", "turnCap", "capability", "oncePerTurn", "noTarget", "blankName"];
+const kinds: FlagKind[] = ["hang", "exception", "rejected", "stuck", "turnCap", "capability", "oncePerTurn", "donCount", "noTarget", "blankName"];
 console.log(`\n${games} games, ${finished} finished, avg ${(turnsTotal / games).toFixed(1)} turns, ${((Date.now() - started) / 1000).toFixed(0)}s`);
 console.log(`${"kind".padEnd(14)}${"total".padStart(7)}${"unique".padStart(8)}`);
 for (const k of kinds) {

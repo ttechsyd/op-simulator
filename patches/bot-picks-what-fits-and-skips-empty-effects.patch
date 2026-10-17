@@ -1,0 +1,100 @@
+diff --git a/submodules/one-piece/packages/engine/src/automation/heuristic-strategy.ts b/submodules/one-piece/packages/engine/src/automation/heuristic-strategy.ts
+index b31b6e6a..088ef79c 100644
+--- a/submodules/one-piece/packages/engine/src/automation/heuristic-strategy.ts
++++ b/submodules/one-piece/packages/engine/src/automation/heuristic-strategy.ts
+@@ -10,6 +10,7 @@ import {
+   baseCost,
+   basePower,
+   effectBlocksFor,
++  effectBlocksForInstance,
+   getCardCounter,
+   getCardForInstance,
+   getCardPower,
+@@ -24,6 +25,7 @@ import {
+   type OnePieceBotPromptResolver,
+   type OnePieceBotStrategy,
+ } from "./bot-strategies.ts";
++import { candidatePoolForTarget, selectionSatisfiesTotalConstraint } from "../effects/targeting.ts";
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+ // Heuristic constants (single-pass scoring, no search). Calibrated by feel and
+@@ -885,11 +887,30 @@ function resolveOptionalConfirm(state: MatchState, prompt: PromptState): EngineC
+   ) {
+     // Defensive declines only: skip effects an opponent's card makes us choose.
+     const effectController = getInstance(state, context.sourceInstanceId).controller;
+-    return confirmCommand(prompt, effectController === prompt.seat);
++    if (effectController !== prompt.seat) return confirmCommand(prompt, false);
++    if (context.intent === "effectOptional" && reachesNothing(state, context)) return confirmCommand(prompt, false);
++    return confirmCommand(prompt, true);
+   }
+   return confirmCommand(prompt, true);
+ }
+ 
++// Paying DON!! or a Life card for "give up to 1 of your opponent's Characters -2000" into an
++// empty board buys nothing. Only effects made wholly of targeted actions count, judged by the
++// first one: later actions often point back at what it picked.
++function reachesNothing(
++  state: MatchState,
++  context: Extract<PromptState["resolutionContext"], { intent: "effectOptional" }>,
++): boolean {
++  const block =
++    context.activatedBlock ??
++    effectBlocksForInstance(state, context.sourceInstanceId, context.trigger)[context.blockIndex];
++  const actions = block?.actions ?? [];
++  if (!actions.length || !actions.every((a) => "target" in a && a.target)) return false;
++  const first = actions[0] as Extract<Action, { target: unknown }>;
++  const pool = candidatePoolForTarget(state, context.controller, context.sourceInstanceId, first.target);
++  return pool.supported && pool.candidateIds.length === 0;
++}
++
+ /** Classify an effectTargetSelection-style prompt and pick targets. */
+ function resolveEffectSelection(state: MatchState, prompt: PromptState): EngineCommand | null {
+   const context = prompt.resolutionContext;
+@@ -939,11 +960,18 @@ function resolveEffectSelection(state: MatchState, prompt: PromptState): EngineC
+     (id) => getInstance(state, id).controller === otherSeat(seat),
+   );
+ 
+-  const harmful = action !== null && HARMFUL_ACTIONS.has(action.action);
++  // -power and -cost hurt whoever holds the card; +cost keeps a Character out of cost-based removal
++  const harmful =
++    action !== null &&
++    (HARMFUL_ACTIONS.has(action.action) ||
++      ((action.action === "modifyPower" || action.action === "modifyCost") &&
++        typeof action.value === "number" &&
++        action.value < 0));
+   const beneficial =
+     action !== null &&
+     (BENEFICIAL_ACTIONS.has(action.action) ||
+       (action.action === "modifyPower" && action.value > 0) ||
++      (action.action === "modifyCost" && typeof action.value === "number" && action.value > 0) ||
+       action.action === "play" ||
+       action.action === "playGrouped" ||
+       action.action === "search");
+@@ -960,6 +988,27 @@ function resolveEffectSelection(state: MatchState, prompt: PromptState): EngineC
+     ordered = byStrongest(state, legalCandidateIds);
+   }
+ 
++  // a total cap ("K.O. up to a total cost of 4") takes as much as fits, biggest first
++  const cap =
++    action && "target" in action && action.target
++      ? action.target.totalConstraint
++      : action && "totalConstraint" in action
++        ? action.totalConstraint
++        : undefined;
++  if (cap && (cap.comparison === "lte" || cap.comparison === "lt")) {
++    const distinct = !!action && "differentNames" in action && !!action.differentNames;
++    const chosen: string[] = [];
++    if (goodForUs) {
++      for (const id of ordered) {
++        if (chosen.length >= prompt.maxSelections) break;
++        const name = getCardForInstance(state, id).name;
++        if (distinct && chosen.some((c) => getCardForInstance(state, c).name === name)) continue;
++        if (selectionSatisfiesTotalConstraint(state, [...chosen, id], cap)) chosen.push(id);
++      }
++    }
++    return selectCommand(prompt, chosen);
++  }
++
+   let count = prompt.minSelections;
+   if (count === 0) {
+     // Optional pick: take one only when it is clearly beneficial.

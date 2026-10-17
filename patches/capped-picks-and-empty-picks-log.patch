@@ -1,0 +1,111 @@
+diff --git a/submodules/one-piece/packages/engine/src/effects/actions.ts b/submodules/one-piece/packages/engine/src/effects/actions.ts
+index e809e46a..30470131 100644
+--- a/submodules/one-piece/packages/engine/src/effects/actions.ts
++++ b/submodules/one-piece/packages/engine/src/effects/actions.ts
+@@ -2435,11 +2435,17 @@ export function promptForTargetSelection(
+   const sourceCard = getCardForInstance(state, sourceInstanceId);
+   const target = "target" in action ? action.target : null;
+   const chooser = target?.chosenBy === "opponent" ? otherSeat(controller) : controller;
++  // under a "total cost of 4 or less" cap, a cost 5 card can never be part of an answer
++  const cap = target?.totalConstraint;
++  const fitting =
++    cap && (cap.comparison === "lte" || cap.comparison === "lt")
++      ? candidateIds.filter((id) => selectionSatisfiesTotalConstraint(state, [id], cap))
++      : candidateIds;
+   const orderedCandidateIds = randomizedConcealedHandOrder(
+     state,
+     sourceInstanceId,
+     chooser,
+-    candidateIds,
++    fitting,
+     "target-selection",
+   );
+   let hiddenHandIndex = 0;
+@@ -4538,6 +4544,20 @@ export function processEffectAction(
+       if (targetIds === "prompt" || !targetIds) {
+         return false;
+       }
++      if (targetIds.length === 0) {
++        emitLog(
++          state,
++          controller,
++          `${effectSourceName(state, sourceInstanceId)} resolves without a target.`,
++          {
++            sourceCardId: getInstance(state, sourceInstanceId).cardId,
++            sourceInstanceId,
++            targetIds,
++            visibility: "public",
++          },
++        );
++        return true;
++      }
+       for (const targetId of targetIds) {
+         getInstance(state, targetId).rested = false;
+       }
+@@ -6071,13 +6091,19 @@ export function processEffectAction(
+       return true;
+     case "play": {
+       const playingSeat = action.source.player === "self" ? controller : otherSeat(controller);
+-      const candidateIds = candidatesForPlayAction(
++      const found = candidatesForPlayAction(
+         state,
+         controller,
+         sourceInstanceId,
+         action,
+         previousActionTargetIds,
+       );
++      // as with targets: a card over a "total cost of 9 or less" cap on its own can't be played
++      const cap = action.totalConstraint;
++      const candidateIds =
++        found && cap && (cap.comparison === "lte" || cap.comparison === "lt")
++          ? found.filter((id) => selectionSatisfiesTotalConstraint(state, [id], cap))
++          : found;
+       if (!candidateIds) {
+         recordCapabilityIssue(state, {
+           kind: "unsupportedAction",
+@@ -6635,6 +6661,20 @@ export function processEffectAction(
+       if (targetIds === "prompt" || !targetIds) {
+         return false;
+       }
++      if (targetIds.length === 0) {
++        emitLog(
++          state,
++          controller,
++          `${effectSourceName(state, sourceInstanceId)} resolves without a target.`,
++          {
++            sourceCardId: getInstance(state, sourceInstanceId).cardId,
++            sourceInstanceId,
++            targetIds,
++            visibility: "public",
++          },
++        );
++        return true;
++      }
+       for (const targetId of targetIds) {
+         addModifier(state, sourceInstanceId, targetId, {
+           type: "flag",
+diff --git a/submodules/one-piece/packages/engine/tests/rules/05-total-cost-cap.test.ts b/submodules/one-piece/packages/engine/tests/rules/05-total-cost-cap.test.ts
+new file mode 100644
+index 00000000..f28dce53
+--- /dev/null
++++ b/submodules/one-piece/packages/engine/tests/rules/05-total-cost-cap.test.ts
+@@ -0,0 +1,19 @@
++import { expect, test } from "vite-plus/test";
++import { OnePieceTestEngine } from "../../src/index.ts";
++
++// Loki (OP17-119) K.O.s Characters with a total cost of 4 or less. A Character that costs
++// more than 4 on its own can never be part of that, so it must not be offered; the bots
++// used to pick it and have the answer refused.
++test("Loki only offers Characters that fit under the total cost", () => {
++  const e = OnePieceTestEngine.create(
++    { leaderCardId: "OP17-079", hand: ["OP17-119"], activeDon: 6 },
++    { leaderCardId: "OP14-020", character: ["OP17-119", "OP04-106", "OP04-108"] },
++  );
++  e.asSouth().play("OP17-119");
++  e.acceptLeadingOptional("south");
++  const prompt = e.getState().promptQueue.find((p) => p.resolutionContext?.intent === "effectTargetSelection");
++  expect(prompt).toBeDefined();
++  const offered = prompt!.options.map((o) => e.getState().cards[o.targetId!]!.cardId);
++  expect(offered).not.toContain("OP17-119");
++  expect(offered.length).toBeGreaterThan(0);
++});
