@@ -251,7 +251,7 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 .mat.opp .life-card { width: 44px; height: 13px; }
 .life-card.up { overflow: hidden; background: #000; }
 .life-card.up img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
-.life .zlabel { color: rgba(255,255,255,0.45); }
+.life .zlabel { color: rgba(255,255,255,0.45); text-align: center; line-height: 1.5; }
 .z-life.drop-ok, .pile.drop-ok { border-radius: 6px; }
 
 /* hand fans under the bottom edge with only the tops showing; the preview is for reading */
