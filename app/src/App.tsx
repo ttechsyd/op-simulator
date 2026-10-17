@@ -245,6 +245,27 @@ function Game({
   // draw and DON!! wait for a tap; the engine has already done them underneath
   const { state, step, donLeft, draw, takeDon } = useManualTurnStart(real);
   const [preview, setPreview] = useState<{ group: ProjectedCard[]; start: number } | null>(null);
+  // how the last battle went, shown for a moment where the readout was; a countered hit
+  // otherwise just vanishes and looks like nothing happened
+  const [after, setAfter] = useState<string | null>(null);
+  const seenBattle = useRef(0);
+  useEffect(() => {
+    const ev = [...real.eventHistory].reverse().find((e) => e.type === "battleResolved");
+    if (!ev || ev.sequence <= seenBattle.current) return;
+    seenBattle.current = ev.sequence;
+    const r = String(ev.payload.result);
+    const a = ev.payload.attackPower;
+    const d = ev.payload.defensePower;
+    const mine = ev.sourceInstanceId ? real.cards[ev.sourceInstanceId]?.owner === ME : false;
+    const text =
+      r === "hit" ? `${mine ? "Hit" : "You take it"} · ${a} vs ${d}`
+      : r === "ko" ? `K.O. · ${a} vs ${d}`
+      : r === "blocked" ? `Blocked by ${cardName(real.cards[ev.targetIds[0]].cardId)} · ${a} vs ${d}`
+      : `No damage · ${a} vs ${d}`;
+    setAfter(text);
+    const t = setTimeout(() => setAfter(null), 1800);
+    return () => clearTimeout(t);
+  }, [real.eventHistory]);
   const [layout, setLayout] = useState<Layout>([null, null, null, null, null]);
   const [showLog, setShowLog] = useState(false);
   useCardMotion(state, seat);
@@ -628,6 +649,10 @@ function Game({
           ) : (
             prompt && prompt.seat !== ME && <span className="hint">Waiting…</span>
           )}
+        </div>
+      ) : after && !myPrompt ? (
+        <div className="battle-bar after">
+          <span>{after}</span>
         </div>
       ) : null}
       <BattleArrow battle={battle} />

@@ -477,6 +477,12 @@ button small { display: block; font-size: 10px; color: var(--muted); }
   font-size: 12px; color: var(--accent); font-weight: 600; white-space: nowrap;
 }
 .battle-bar .hint { margin: 0; color: var(--muted); font-weight: 400; font-size: 11px; }
+.battle-bar.after { animation: after 1.8s ease-out forwards; pointer-events: none; }
+@keyframes after {
+  0% { opacity: 0; transform: translate(-50%, -40%) scale(var(--k)); }
+  12%, 70% { opacity: 1; transform: translate(-50%, -50%) scale(var(--k)); }
+  100% { opacity: 0; transform: translate(-50%, -60%) scale(var(--k)); }
+}
 .battle-bar button { min-height: 24px; padding: 0 12px; font-size: 11px; border-radius: 999px; }
 .battle-bar small { font-weight: 400; color: var(--muted); }
 .battle-bar > span { max-width: 420px; white-space: normal; line-height: 1.25; }
