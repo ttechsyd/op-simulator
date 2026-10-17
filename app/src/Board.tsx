@@ -101,7 +101,7 @@ function Don({ rested, press }: { rested?: boolean; press?: (e: ReactPointerEven
 }
 
 // life[0] is the top of the stack; a card turned face up by an effect stays visible
-function Life({ cards, press }: { cards: ProjectedCard[]; press?: Press }) {
+function Life({ cards, press, dealt }: { cards: ProjectedCard[]; press?: Press; dealt: boolean }) {
   const up = cards.filter((c) => !c.hidden);
   return (
     <div className="life">
@@ -122,7 +122,7 @@ function Life({ cards, press }: { cards: ProjectedCard[]; press?: Press }) {
           ),
         )}
       </div>
-      <span className="zlabel">{cards.length ? `Life ${cards.length}` : <>No life<br />next hit wins</>}</span>
+      <span className="zlabel">{!dealt ? "Life" : cards.length ? `Life ${cards.length}` : <>No life<br />next hit wins</>}</span>
     </div>
   );
 }
@@ -173,6 +173,7 @@ export function Seat({
   onDeck,
   onDon,
   deckSplit,
+  dealt = true,
 }: {
   p: ProjectedPlayerState;
   opponent?: boolean;
@@ -193,6 +194,8 @@ export function Seat({
   onDon?: () => void;
   // a "top or bottom of the deck" prompt is answered by dropping or tapping on half the pile
   deckSplit?: (half: "top" | "bottom") => void;
+  // life goes out with the game start, so an empty stack before then means nothing
+  dealt?: boolean;
 }) {
   const lit = (c: ProjectedCard | null) => !!c?.instanceId && !!litIds?.has(c.instanceId);
   const on = (c: ProjectedCard | null) => !!c?.instanceId && !!onIds?.has(c.instanceId);
@@ -215,7 +218,7 @@ export function Seat({
   return (
     <div className={`mat ${opponent ? "opp" : "me"}`} data-drop={opponent ? undefined : "side"}>
       <div className={`z-life ${opponent ? "" : dropClass("life", drop)}`} data-drop={opponent ? undefined : "life"}>
-        <Life cards={p.life} press={press} />
+        <Life cards={p.life} press={press} dealt={dealt} />
       </div>
 
       <div className="z-chars">

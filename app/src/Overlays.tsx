@@ -3,6 +3,7 @@ import type {
   EngineCommand,
   LegalCommandDescriptor,
   MatchState,
+  ProjectedCard,
   PromptState,
 } from "@tcg/op-engine";
 import { cardImage, cardName } from "./cards";
@@ -125,7 +126,17 @@ export function PromptSheet({
   );
 }
 
-export function SetupSheet({ legal, send }: { legal: LegalCommandDescriptor[]; send: (c: EngineCommand) => void }) {
+export function SetupSheet({
+  legal,
+  send,
+  hand,
+  onPeek,
+}: {
+  legal: LegalCommandDescriptor[];
+  send: (c: EngineCommand) => void;
+  hand: ProjectedCard[];
+  onPeek: (i: number) => void;
+}) {
   const cmds = legal.filter((c) => c.type !== "concede");
   if (!cmds.length) {
     return (
@@ -140,9 +151,18 @@ export function SetupSheet({ legal, send }: { legal: LegalCommandDescriptor[]; s
         : cmds[0].type === "startGame"
           ? "Ready"
           : "Keep this hand?";
+  // the opening hand is the whole question, so it sits in the sheet at full size
+  const keeping = cmds.some((c) => c.type === "keepHand");
   return (
-    <div className="setup">
+    <div className={`setup ${keeping ? "keep" : ""}`}>
       <h3>{title}</h3>
+      {keeping && (
+        <div className="opening">
+          {hand.map((c, i) => (
+            <img key={c.instanceId ?? i} src={cardImage(c.cardId!)} alt={cardName(c.cardId!)} draggable={false} onClick={() => onPeek(i)} />
+          ))}
+        </div>
+      )}
       <div className="actions">
         {cmds.map((c, i) => (
           <button key={i} onClick={() => send(commandFor(c))}>

@@ -557,6 +557,7 @@ function Game({
         <Seat
           p={opp}
           opponent
+          dealt={state.status !== "setup"}
           press={pressCard}
           drop={drop}
           litIds={new Set([...battleIds, ...pickIds])}
@@ -584,6 +585,7 @@ function Game({
 
         <Seat
           p={me}
+          dealt={state.status !== "setup"}
           press={pressCard}
           pressDon={myTurn ? pressDon : undefined}
           pressRestedDon={pressRestedDon}
@@ -619,7 +621,7 @@ function Game({
         />
 
         <Hand
-          cards={view.players[ME].hand}
+          cards={state.status === "setup" ? [] : view.players[ME].hand}
           press={pressCard}
           litIds={battleStep ? stepIds : tray === "pick" ? pickIds : canAct}
           onIds={new Set(picked)}
@@ -750,7 +752,9 @@ function Game({
         />
       )}
 
-      {state.status === "setup" && <SetupSheet legal={legal} send={send} />}
+      {state.status === "setup" && (
+        <SetupSheet legal={legal} send={send} hand={view.players[ME].hand} onPeek={(i) => setPreview({ group: view.players[ME].hand, start: i })} />
+      )}
       {myPrompt && tray && !trigger && !boardPick && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} picked={picked} setPicked={setPicked} send={send} press={press} />}
       {myPrompt && !tray && !battleStep && !quick && <PromptSheet key={myPrompt.id} prompt={myPrompt} state={state} send={send} />}
       {preview && (!myPrompt || battleStep || trigger || quick) && (
