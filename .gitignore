@@ -2,3 +2,5 @@ opsim-debug.apk
 *.apk
 node_modules/
 server/dist/
+scripts/fuzz.bundle.mjs
+scripts/fuzz-report.json
