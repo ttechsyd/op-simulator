@@ -131,6 +131,7 @@ export function localTable(initial: MatchState, mode: Mode, level: Level = "norm
 
   const commit = (s: MatchState) => {
     state = s;
+    if (import.meta.env.DEV) (window as unknown as { opsim: unknown }).opsim = { state };
     emit({ kind: "changed" });
     wakeBot();
   };

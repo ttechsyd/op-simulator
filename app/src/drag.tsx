@@ -7,7 +7,8 @@ import { ME } from "./match";
 export type DragSource =
   | { kind: "hand"; card: ProjectedCard }
   | { kind: "attacker"; card: ProjectedCard }
-  | { kind: "don" }
+  // the caller can point a DON!! drag somewhere else, like at a skill's chosen target
+  | { kind: "don"; targets?: Set<string>; drop?: (key: string) => void }
   | { kind: "look"; card: ProjectedCard }
   // a one-off drag whose targets and effect the caller decides: tray cards onto the
   // deck, counters onto the defender, blockers onto the attacker
@@ -61,6 +62,7 @@ export function useDrag(
       } else if (type === "stage") out.add("stage");
       else out.add("side");
     } else if (source.kind === "don") {
+      if (source.targets) return source.targets;
       for (const p of potential) if (p.type === "attachDon" && p.enabled && p.sourceId) out.add(`mine:${p.sourceId}`);
     } else if (source.kind === "attacker") {
       const a = potential.find((p) => p.type === "declareAttack" && p.sourceId === source.card.instanceId);
@@ -81,7 +83,8 @@ export function useDrag(
       send({ type: "playCard", seat: ME, instanceId: source.card.instanceId!, slotIndex: a?.slotChoices?.[0] });
       if (kind === "slot") place(source.card.instanceId!, Number(arg));
     } else if (source.kind === "don" && kind === "mine") {
-      send({ type: "attachDon", seat: ME, targetId: arg, amount: 1 });
+      if (source.drop) source.drop(key);
+      else send({ type: "attachDon", seat: ME, targetId: arg, amount: 1 });
     } else if (source.kind === "attacker") {
       if (kind === "opp") send({ type: "declareAttack", seat: ME, attackerId: source.card.instanceId!, targetId: arg });
       else if (kind === "slot") place(source.card.instanceId!, Number(arg));

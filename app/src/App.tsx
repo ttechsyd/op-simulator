@@ -20,7 +20,7 @@ import { BOT, DECKS, ME, localTable, newMatch, pendingPrompt, seatToShow, sitAt,
 import type { Level } from "./bot";
 import { Lobby } from "./Lobby";
 import { forgetRoom } from "./net";
-import { cardCounter, cardImage, cardName, timingName } from "./cards";
+import { cardCounter, cardImage, cardName, skillWantsDon, timingName } from "./cards";
 import { Builder, DeckList, DeckView } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from "./decks";
 import { appReady, applyUpdate, bundleVersion, checkForUpdate, installApk, type Check } from "./update";
@@ -323,10 +323,18 @@ function Game({
   }, [battleStep, myPrompt]);
   const myTurn = state.status === "active" && state.activeSeat === ME && !prompt;
   const legal = useMemo(() => getLegalCommands(state, ME), [state]);
-  const potential = useMemo(
-    () => (myTurn && state.phase === "main" ? getPotentialCardCommands(state, ME) : []),
-    [state, myTurn],
-  );
+  const potential = useMemo(() => {
+    if (!(myTurn && state.phase === "main")) return [];
+    // the engine lets a "give a DON!!" skill fire with none to give, which burns its once per
+    // turn for nothing; hold it back until there is one
+    const p = state.players[ME];
+    return getPotentialCardCommands(state, ME).map((a) => {
+      if (a.type !== "activateEffect" || !a.enabled || !a.sourceId) return a;
+      const wants = skillWantsDon(state.cards[a.sourceId].cardId);
+      if (!wants || (wants === "rested" ? p.restedDon : p.activeDon) > 0) return a;
+      return { ...a, enabled: false, disabledReason: `No ${wants} DON!! to give` };
+    });
+  }, [state, myTurn]);
 
   // my characters in the order I arranged them, not the engine's slot order
   const settled = useMemo(() => settleLayout(layout, view.players[ME].characters), [layout, view]);
@@ -440,6 +448,31 @@ function Game({
     );
   };
   const pressDon = (e: ReactPointerEvent) => press(e, { kind: "don" });
+  // A skill that hands out DON!! asks twice: how many, then to whom. Dragging a rested
+  // DON!! onto the card answers both; the second answer waits for the second question.
+  const givingCount = quick?.resolutionContext?.intent === "effectGiveDonCount" ? quick : null;
+  const givingDon = boardPick && myPrompt && /^giveDon$/i.test(String(myPrompt.context.action ?? ""));
+  const giveTo = useRef<string | null>(null);
+  const pressRestedDon = givingCount
+    ? (e: ReactPointerEvent) =>
+        press(e, {
+          kind: "don",
+          targets: new Set([me.leader, ...me.characters].flatMap((c) => (c?.instanceId ? [`mine:${c.instanceId}`] : []))),
+          drop: (key) => {
+            giveTo.current = key.slice(5);
+            send({ type: "resolvePrompt", seat: ME, promptId: givingCount.id, optionId: "1" });
+          },
+        })
+    : givingDon
+      ? (e: ReactPointerEvent) =>
+          press(e, { kind: "don", targets: new Set([...pickIds].map((id) => `mine:${id}`)), drop: (key) => pick(key.slice(5)) })
+      : undefined;
+  useEffect(() => {
+    const to = giveTo.current;
+    if (!to || !givingDon) return;
+    giveTo.current = null;
+    if (pickIds.has(to)) pick(to);
+  }, [givingDon, myPrompt?.id]);
 
   // a small face in the readout that opens the card big enough to read
   const thumb = (id: string) => {
@@ -531,6 +564,7 @@ function Game({
           p={me}
           press={pressCard}
           pressDon={myTurn ? pressDon : undefined}
+          pressRestedDon={pressRestedDon}
           drop={drop}
           litIds={new Set([...battleIds, ...canAct, ...stepIds, ...pickIds])}
           onIds={new Set(picked)}
@@ -595,7 +629,9 @@ function Game({
               {" "}
               {myPrompt.resolutionContext?.intent === "playCharacterReplacement"
                 ? "board full · trash 1"
-                : (myPrompt.details || myPrompt.label).replace(/\.$/, "")}
+                : givingDon
+                  ? "drag a rested DON!! over, or tap the card"
+                  : (myPrompt.details || myPrompt.label).replace(/\.$/, "")}
             </small>
           </span>
           {myPrompt.maxSelections > 1 && <span className="hint">{picked.length}/{myPrompt.maxSelections}</span>}
@@ -620,7 +656,9 @@ function Game({
               {" "}
               {quick.resolutionContext?.intent === "effectOptional"
                 ? `use [${timingName(String(quick.context.trigger))}]?`
-                : quick.details || quick.label}
+                : givingCount
+                  ? "how many DON!!? or drag a rested one over"
+                  : quick.details || quick.label}
             </small>
           </span>
           {quick.resolutionContext?.intent === "loopIterations" ? (
@@ -696,7 +734,7 @@ function Game({
           step={
             battleStep && myPrompt
               ? {
-                  label: battleStep === "counter" ? "Use counter" : "Block with this",
+                  label: battleStep === "counter" ? "✚ Counter" : "⛨ Block",
                   ids: stepIds,
                   pick: (id) => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [id] }),
                 }

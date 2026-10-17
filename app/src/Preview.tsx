@@ -15,6 +15,9 @@ function instanceName(state: MatchState, id: string) {
   return inst.zone === "leader" ? `Leader ${n}` : n;
 }
 
+// the strip's buttons say what, not to whom: the card they sit under is the whom
+const SHORT: Record<string, string> = { playCard: "▲ Play", attachDon: "● DON!!", declareAttack: "⚔ Attack", activateEffect: "✦ Skill" };
+
 // every card of the tapped group laid out big enough to read, scrolling sideways
 export function Preview({
   group,
@@ -95,7 +98,7 @@ export function Preview({
               <img src={cardImage(card.cardId!)} alt={card.name ?? ""} draggable={false} />
               <div className="pv-actions">
                 {step && card.instanceId && step.ids.has(card.instanceId) && (
-                  <button onClick={() => { step.pick(card.instanceId!); onClose(); }}>{step.label}</button>
+                  <button className="act" onClick={() => { step.pick(card.instanceId!); onClose(); }}>{step.label}</button>
                 )}
                 {pick
                   ? [
@@ -107,8 +110,8 @@ export function Preview({
                       <button key="back" className="ghost" onClick={() => setPicking(null)}>Back</button>,
                     ]
                   : actions.map((a, k) => (
-                      <button key={k} disabled={!a.enabled} onClick={() => run(card, a)} title={a.disabledReason}>
-                        {a.label}
+                      <button key={k} className="act" disabled={!a.enabled} onClick={() => run(card, a)} title={a.disabledReason}>
+                        {SHORT[a.type] ?? a.label}
                       </button>
                     ))}
               </div>

@@ -97,7 +97,7 @@ export function CardView({
 }
 
 function Don({ rested, press }: { rested?: boolean; press?: (e: ReactPointerEvent) => void }) {
-  return <div className={`don ${rested ? "rested" : ""} ${press ? "grab" : ""}`} onPointerDown={press} />;
+  return <div className={`don ${rested ? "rested" : ""} ${press ? "grab" : ""} ${rested && press ? "lit" : ""}`} onPointerDown={press} />;
 }
 
 // life[0] is the top of the stack; a card turned face up by an effect stays visible
@@ -163,6 +163,7 @@ export function Seat({
   opponent,
   press,
   pressDon,
+  pressRestedDon,
   drop,
   litIds,
   onIds,
@@ -177,6 +178,8 @@ export function Seat({
   opponent?: boolean;
   press?: Press;
   pressDon?: (e: ReactPointerEvent) => void;
+  // a skill that gives a rested DON!! lets you drag one to the card you mean
+  pressRestedDon?: (e: ReactPointerEvent) => void;
   drop?: Drop;
   litIds?: Set<string>;
   onIds?: Set<string>;
@@ -271,7 +274,7 @@ export function Seat({
 
       <div className="z-cost">
         {Array.from({ length: p.activeDon }, (_, i) => <Don key={`a${i}`} press={pressDon} />)}
-        {Array.from({ length: p.restedDon }, (_, i) => <Don key={`r${i}`} rested />)}
+        {Array.from({ length: p.restedDon }, (_, i) => <Don key={`r${i}`} rested press={pressRestedDon} />)}
         <span className="zlabel">{opponent ? "Cost area" : `Cost area · ${p.activeDon} active`}</span>
       </div>
 
@@ -308,7 +311,6 @@ export function Hand({
   // the card under the finger while it slides along the fan; it rises so you can read it
   const [peek, setPeek] = useState<string | null>(null);
   const peeking = useRef<ProjectedCard | null>(null);
-  const slid = useRef(false);
 
   const under = (x: number) => {
     const els = fan.current?.querySelectorAll<HTMLElement>(".card") ?? [];
@@ -336,8 +338,6 @@ export function Hand({
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
       settle(null);
-      // the browser's click for this gesture lands on the fan itself; it isn't a tap on the felt
-      slid.current = true;
       if (finger) onLift(false);
     };
     // the press goes first so its tap still sees which card the finger ended on
@@ -351,10 +351,6 @@ export function Hand({
     <div
       className={`hand ${pos}`}
       ref={fan}
-      onClick={(e) => {
-        if (slid.current) slid.current = false;
-        else if (e.target === e.currentTarget) onLift("toggle");
-      }}
       onPointerEnter={(e) => e.pointerType === "mouse" && onLift(true)}
       onPointerLeave={(e) => e.pointerType === "mouse" && onLift(false)}
     >

@@ -33,6 +33,14 @@ export function cardCounter(cardId: string): number | null {
   return "counter" in c && typeof c.counter === "number" ? c.counter : null;
 }
 
+// a skill that only hands out DON!! has nothing to do without one; which kind it wants
+export function skillWantsDon(cardId: string): "rested" | "active" | null {
+  const blocks = getCard(cardId).effects?.effects?.filter((e) => e.trigger === "activateMain") ?? [];
+  const actions = blocks.flatMap((b) => b.actions ?? []);
+  if (!actions.length || !actions.every((a) => a.action === "giveDon")) return null;
+  return actions.some((a) => "donState" in a && a.donState === "rested") ? "rested" : "active";
+}
+
 const TIMINGS: Record<string, string> = {
   onPlay: "On Play",
   whenAttacking: "When Attacking",
