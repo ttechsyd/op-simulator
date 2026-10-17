@@ -310,6 +310,8 @@ export function Hand({
   const fan = useRef<HTMLDivElement>(null);
   // the card under the finger while it slides along the fan; it rises so you can read it
   const [peek, setPeek] = useState<string | null>(null);
+  // where the big copy floats: over the card, in the hand's own 940px-wide frame
+  const [peekX, setPeekX] = useState(0);
   const peeking = useRef<ProjectedCard | null>(null);
 
   const under = (x: number) => {
@@ -328,6 +330,12 @@ export function Hand({
     const settle = (card: ProjectedCard | null) => {
       peeking.current = card;
       setPeek(card?.instanceId ?? null);
+      const el = card && fan.current?.querySelectorAll<HTMLElement>(".card")[cards.indexOf(card)];
+      if (el && fan.current) {
+        const box = fan.current.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        setPeekX(((r.left + r.width / 2 - box.left) * 940) / box.width);
+      }
     };
     settle(c);
     const finger = e.pointerType !== "mouse";
@@ -370,12 +378,18 @@ export function Hand({
             marks={c.instanceId ? marks?.get(c.instanceId) : undefined}
             style={{
               marginLeft: i ? step - 80 : 0,
-              transform: up ? "translateY(-54px) scale(1.35)" : `rotate(${off * 3}deg) translateY(${Math.abs(off) * 3}px)`,
+              transform: up ? "translateY(-14px)" : `rotate(${off * 3}deg) translateY(${Math.abs(off) * 3}px)`,
               zIndex: up ? 5 : undefined,
             }}
           />
         );
       })}
+      {peek && pos !== "tuck" && (() => {
+        const c = cards.find((x) => x.instanceId === peek);
+        return c?.cardId ? (
+          <img key={peek} className="peek-big" src={cardImage(c.cardId)} alt="" style={{ left: Math.max(115, Math.min(825, peekX)) }} />
+        ) : null;
+      })()}
     </div>
   );
 }

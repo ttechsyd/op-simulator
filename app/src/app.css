@@ -265,6 +265,13 @@ button small { display: block; font-size: 10px; color: var(--muted); }
   pointer-events: none;
 }
 .hand .card { pointer-events: auto; }
+/* the card under a sliding finger, big enough to read, floating clear of the thumb */
+.hand .peek-big {
+  position: absolute; top: -312px; width: 220px; aspect-ratio: 0.716; transform: translateX(-50%);
+  border-radius: 10px; box-shadow: 0 14px 36px rgba(0,0,0,0.7); pointer-events: none; z-index: 30;
+  animation: peek-in 120ms ease-out;
+}
+@keyframes peek-in { from { opacity: 0; transform: translateX(-50%) translateY(16px) scale(0.92); } }
 .hand.up { transform: translateY(-64px); }
 .hand.half { transform: translateY(-36px); }
 .hand.tuck { transform: translateY(24px); }
