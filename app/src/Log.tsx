@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { MatchState, ProjectedLogEntry } from "@tcg/op-engine";
-import { cardCounter, cardImage, cardName } from "./cards";
+import { cardCounter, cardName } from "./cards";
 
 const IRREGULAR: Record<string, string> = { is: "are", has: "have", does: "do", goes: "go" };
 
@@ -83,10 +83,9 @@ export function Log({
             <div key={l.id}>
               {mark && <span className="turn">turn {l.turn}</span>}
               <div
-                className={`log-line ${l.actor === "south" ? "me" : ""} ${phase ? "phase" : ""} ${l.sourceCardId ? "card" : ""}`}
+                className={`log-line ${l.actor === "south" ? "me" : ""} ${phase ? "phase" : ""} ${l.sourceCardId ? "tap" : ""}`}
                 onClick={l.sourceCardId ? () => onCard(l.sourceCardId!, l.sourceInstanceId) : undefined}
               >
-                {l.sourceCardId && <img src={cardImage(l.sourceCardId)} alt="" />}
                 <span>
                   {wording(l.message)}
                   {extra && <small> {extra}</small>}
