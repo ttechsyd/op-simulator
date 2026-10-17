@@ -151,7 +151,8 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 .loglines span:first-child { color: var(--ink); }
 .loglines:active { background: rgba(255,255,255,0.1); }
 .turn { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; color: var(--accent); }
-.z-act { grid-area: act; display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+/* the lifted hand's box reaches up over this row; the buttons stay on top of it */
+.z-act { grid-area: act; display: flex; justify-content: flex-end; align-items: center; gap: 6px; position: relative; z-index: 21; }
 .z-act button { min-height: 24px; padding: 0 12px; font-size: 11px; border-radius: 999px; }
 .z-act button.ghost { border-color: rgba(255,255,255,0.2); }
 

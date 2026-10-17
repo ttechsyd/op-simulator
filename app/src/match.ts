@@ -99,8 +99,8 @@ export type TableEvent =
 
 export function localTable(initial: MatchState, mode: Mode): Table {
   let state = initial;
-  // DON attachments can be taken back until anything else happens, like asking
-  // your opponent "wait, I meant the other one"
+  // your own moves can be taken back until the bot answers one, like asking across
+  // the table "wait, I meant the other one"; the bot never argues
   let past: MatchState[] = [];
   const listeners = new Set<(ev: TableEvent) => void>();
   let botTimer: ReturnType<typeof setTimeout> | undefined;
@@ -113,8 +113,13 @@ export function localTable(initial: MatchState, mode: Mode): Table {
       emit({ kind: "rejected", reason: r.reason ?? "That move isn't allowed right now" });
       return;
     }
-    if (cmd.type === "attachDon" && cmd.seat === ME) past.push(state);
-    else past = [];
+    const judge = cmd.type === "resolvePrompt" && pendingPrompt(state)?.kind === "judge";
+    if (judge) {
+      // the rules question isn't anyone's move
+    } else if (mode === "self" || cmd.seat === ME) {
+      past.push(state);
+      if (past.length > 30) past.shift();
+    } else past = [];
     commit(r.state);
   };
 

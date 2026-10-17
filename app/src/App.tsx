@@ -496,7 +496,7 @@ function Game({
           }
           actions={
             <>
-              {undo && myTurn && !step && <button className="ghost small" onClick={undo}>Undo DON</button>}
+              {undo && state.status === "active" && !step && <button className="ghost small" onClick={undo}>Undo</button>}
               {step === "draw" ? (
                 <button className="end" onClick={draw}>Draw</button>
               ) : step === "don" ? (
@@ -537,7 +537,12 @@ function Game({
         <div className="battle-bar">
           <span>
             {myPrompt.sourceInstanceId && cardName(state.cards[myPrompt.sourceInstanceId].cardId)}
-            <small> {myPrompt.details || myPrompt.label}</small>
+            <small>
+              {" "}
+              {myPrompt.resolutionContext?.intent === "playCharacterReplacement"
+                ? "needs a space: trash 1 of your Characters"
+                : myPrompt.details || myPrompt.label}
+            </small>
           </span>
           <span className="hint">
             {myPrompt.maxSelections === 1 ? "Tap a lit card" : `Tap lit cards · ${picked.length}/${myPrompt.maxSelections}`}
