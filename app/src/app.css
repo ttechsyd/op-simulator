@@ -494,6 +494,7 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 }
 .battle-bar .hint { margin: 0; color: var(--muted); font-weight: 400; font-size: 11px; }
 .battle-bar.after { animation: after 1.8s ease-out forwards; pointer-events: none; }
+.battle-bar.after.long { animation-duration: 3.5s; }
 @keyframes after {
   0% { opacity: 0; transform: translate(-50%, -40%) scale(var(--k)); }
   12%, 70% { opacity: 1; transform: translate(-50%, -50%) scale(var(--k)); }

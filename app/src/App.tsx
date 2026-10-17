@@ -18,6 +18,7 @@ import { useManualTurnStart } from "./turnStart";
 import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "./drag";
 import { BOT, DECKS, ME, localTable, newMatch, pendingPrompt, seatToShow, sitAt, useMatch, type DeckId, type Mode, type Table } from "./match";
 import type { Level } from "./bot";
+import { quietEndEffects, wastedUse } from "./skips";
 import { Lobby } from "./Lobby";
 import { forgetRoom } from "./net";
 import { cardCounter, cardImage, cardName, skillWantsDon, timingName } from "./cards";
@@ -281,6 +282,20 @@ function Game({
     const t = setTimeout(() => setAfter(null), 1800);
     return () => clearTimeout(t);
   }, [real.eventHistory]);
+
+  // end-of-turn effects that never fired, said out loud once the turn has passed
+  const [quiet, setQuiet] = useState<string[]>([]);
+  const lastTurn = useRef({ turn: real.turnNumber, seat: real.activeSeat });
+  useEffect(() => {
+    const was = lastTurn.current;
+    lastTurn.current = { turn: real.turnNumber, seat: real.activeSeat };
+    if (real.turnNumber <= was.turn || !was.seat || (was.seat !== ME && mode !== "self")) return;
+    const skipped = quietEndEffects(real, was.seat, was.turn);
+    if (!skipped.length) return;
+    setQuiet(skipped);
+    const t = setTimeout(() => setQuiet([]), 3500);
+    return () => clearTimeout(t);
+  }, [real.turnNumber]);
   const [layout, setLayout] = useState<Layout>([null, null, null, null, null]);
   const [showLog, setShowLog] = useState(false);
   useCardMotion(state, seat);
@@ -297,6 +312,8 @@ function Game({
     !myPrompt.options.some((o) => o.targetId) && myPrompt.options.length <= 8 && myPrompt.options.every((o) => o.label.length <= 16)
       ? myPrompt
       : null;
+  // the real state, not the staged one: the dry run has to see the actual hand and life
+  const wasted = useMemo(() => !!quick && wastedUse(real, quick), [quick?.id]);
   // a pick prompt can be answered on the table too: drag the card where the
   // effect sends it (trash, deck, life) or onto the tray itself
   const [picked, setPicked] = useState<string[]>([]);
@@ -662,7 +679,7 @@ function Game({
             <small>
               {" "}
               {quick.resolutionContext?.intent === "effectOptional"
-                ? `use [${timingName(String(quick.context.trigger))}]?`
+                ? `use [${timingName(String(quick.context.trigger))}]?${wasted ? " no target, it would do nothing" : ""}`
                 : givingCount
                   ? "how many DON!!? or drag a rested one over"
                   : quick.details || quick.label}
@@ -678,7 +695,7 @@ function Game({
               <button
                 key={o.id}
                 className={/^(no|skip|cancel|pass|decline|none|0)$/i.test(o.id) || /^(no|skip|cancel|pass|decline)\b/i.test(o.label) ? "ghost" : ""}
-                disabled={o.enabled === false}
+                disabled={o.enabled === false || (wasted && o.id === "yes")}
                 onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: quick.id, optionId: o.id })}
               >
                 {o.label}
@@ -713,6 +730,10 @@ function Game({
       ) : after && !myPrompt ? (
         <div className="battle-bar after">
           <span>{after}</span>
+        </div>
+      ) : quiet.length && !myPrompt ? (
+        <div className="battle-bar after long">
+          <span>{quiet.join(" · ")}</span>
         </div>
       ) : null}
       <BattleArrow battle={battle} />
