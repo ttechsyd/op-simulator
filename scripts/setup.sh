@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 git submodule update --init
+bash scripts/patch-engine.sh
 # the app pins pnpm 12, which the corepack bundled with node 22 can't run
 npm install -g corepack@latest >/dev/null 2>&1 || true
 corepack enable

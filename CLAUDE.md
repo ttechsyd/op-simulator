@@ -30,6 +30,9 @@ The code in this repo must not read as AI-generated. Concretely:
 - Cards register themselves when `@tcg/op-cards` is imported. Images come from each
   printing's `imageUrl`, never bundled.
 - Build the engine before the app: `pnpm exec turbo run build` in the one-piece workspace.
+- Engine fixes upstream won't take live as diffs in `patches/`, applied onto the submodule's
+  working tree by `scripts/patch-engine.sh` before every engine build (setup.sh, both
+  workflows). The submodule itself keeps pointing at upstream.
 - Git has `core.longpaths` on for this clone; leave it.
 
 ## Two kinds of table

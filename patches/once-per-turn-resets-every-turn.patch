@@ -1,0 +1,103 @@
+diff --git a/submodules/one-piece/packages/engine/src/state.ts b/submodules/one-piece/packages/engine/src/state.ts
+index d49afa9ff..f239d7b1e 100644
+--- a/submodules/one-piece/packages/engine/src/state.ts
++++ b/submodules/one-piece/packages/engine/src/state.ts
+@@ -968,6 +968,11 @@ function resetStartOfTurnState(state: MatchState, seat: MatchSeat) {
+   let returningDon = 0;
+ 
+   for (const instance of Object.values(state.cards)) {
++    // 10-2-13: [Once Per Turn] is per turn, not per own turn. Laboon (EB01-047) that
++    // drew off a K.O. during its own attack has to fire again when the opponent K.O.s
++    // one of its controller's Characters, so every card resets here, not just the
++    // turn player's.
++    instance.usedEffectKeys = [];
+     if (instance.controller !== seat) {
+       continue;
+     }
+@@ -976,7 +981,6 @@ function resetStartOfTurnState(state: MatchState, seat: MatchSeat) {
+       if (!isCardPreventedFromRefreshing(state, instance.instanceId)) {
+         instance.rested = false;
+       }
+-      instance.usedEffectKeys = [];
+       if (instance.attachedDon > 0) {
+         transferDonIdentities(
+           state,
+diff --git a/submodules/one-piece/packages/engine/tests/rules/10-keywords.test.ts b/submodules/one-piece/packages/engine/tests/rules/10-keywords.test.ts
+index 16044b43d..39daef4d4 100644
+--- a/submodules/one-piece/packages/engine/tests/rules/10-keywords.test.ts
++++ b/submodules/one-piece/packages/engine/tests/rules/10-keywords.test.ts
+@@ -1,6 +1,7 @@
+ import { describe, expect, test } from "vite-plus/test";
+ import {
+   eb01EdwardWeevil023,
++  eb01Laboon047,
+   eb01MountainGod018,
+   eb01Mr9037,
+   eb01TonyTonyChopper006,
+@@ -652,6 +653,66 @@ describe("Rule 10-2-13: [Once Per Turn]", () => {
+     ).toBe(4000);
+   });
+ 
++  // Laboon EB01-047: [Once Per Turn] When a Character is K.O.'d, draw 1 card and trash 1
++  // card from your hand. The count is per turn, so using it on your own turn must not
++  // keep it spent through the opponent's.
++  test("10-2-13-1: a [Once Per Turn] effect used on its controller's turn can be used again on the opponent's turn", () => {
++    const engine = OnePieceTestEngine.create(
++      {
++        character: [eb01Laboon047, { card: eb01MountainGod018, playedOnTurn: 0 }],
++        hand: 2,
++        deck: 3,
++      },
++      {
++        character: [
++          { card: eb01MountainGod018, playedOnTurn: 0 },
++          { card: op13Higuma013, rested: true },
++        ],
++        hand: 2,
++        deck: 3,
++      },
++      SOUTH_ATTACKS,
++    );
++    const southAttackerId = engine.asSouth().findOnField(eb01MountainGod018);
++    const higumaId = engine.asNorth().findOnField(op13Higuma013);
++
++    engine.asSouth().attack(southAttackerId, higumaId);
++    if (engine.asNorth().hasPendingChoice()) {
++      engine.asNorth().chooseCounter();
++    }
++    expect(engine.asSouth().view().players.south.hand).toHaveLength(3);
++    engine.asSouth().trashFromHand(engine.asSouth().view().players.south.hand[0]!.instanceId!);
++    expect(engine.asSouth().view().players.south.deckCount).toBe(2);
++
++    engine.asSouth().endTurn();
++    const northAttackerId = engine.asNorth().findOnField(eb01MountainGod018);
++    engine.asNorth().attack(northAttackerId, southAttackerId);
++    const counterStep = engine
++      .getState()
++      .promptQueue.some((prompt) => prompt.resolutionContext?.intent === "battleCounter");
++    if (counterStep) {
++      engine.asSouth().chooseCounter();
++    }
++
++    expect(
++      engine
++        .asSouth()
++        .view()
++        .players.south.characters.map((card) => card?.instanceId),
++    ).not.toContain(southAttackerId);
++    const discard = engine.pendingDecision("effectTrashFromHandSelection", "south").steps[0];
++    if (discard?.kind !== "selectEntity") {
++      throw new Error("Laboon's controller should be picking the card to trash.");
++    }
++    expect(engine.asSouth().view().players.south.hand).toHaveLength(3);
++    engine.asSouth().trashFromHand(discard.candidates[0]!.ref.id);
++
++    const south = engine.asSouth().view().players.south;
++    expect(south.hand).toHaveLength(2);
++    expect(south.deckCount).toBe(1);
++    expect(engine.asSouth().view().prompts).toHaveLength(0);
++  });
++
+   // GAP: test-harness — 10-2-13-5 (a failed activation-cost payment still spends the
+   // [Once Per Turn]) requires becoming unable to pay mid-payment. The public command API
+   // validates costs atomically up front, so no command sequence can reach that state.
