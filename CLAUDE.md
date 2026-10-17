@@ -56,6 +56,7 @@ locally with `pnpm --dir server dev` and open the app with `?server=ws://localho
 Type-check with `app/node_modules/.bin/tsc --noEmit -p app` (npx may pick a newer typescript).
 `node scripts/fuzz.mjs [--rounds 6] [--seed 1] [deck.json ...]` plays every precon and test deck against each other
 with bots and writes anything the engine got wrong to `scripts/fuzz-report.json`; `--pair A,B --seed N --log` replays one game.
+A deck file can hold a list of decks; `--only scripts/decks/meta-2026-10.json` plays just the 15 tournament decks kept there.
 Pushes to `main` that touch `app/` make
 `.github/workflows/bundle.yml` publish a release the phone installs from its menu; native
 changes (plugins, manifest, gradle) ship as `opsim.apk` on the same release. The signing key

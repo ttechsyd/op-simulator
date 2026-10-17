@@ -2,7 +2,7 @@
 // deck (and itself) a few rounds with fixed seeds; anything the engine does that a player
 // would report as a bug gets written to a JSON report. Run through fuzz.mjs.
 import "@tcg/op-cards";
-import { ONE_PIECE_PRECONSTRUCTED_DECKS } from "@tcg/op-cards";
+import { ONE_PIECE_PRECONSTRUCTED_DECKS, validateDeckForFormat } from "@tcg/op-cards";
 import {
   applyCommand,
   createMatch,
@@ -17,7 +17,9 @@ import {
   type MatchState,
 } from "@tcg/op-engine";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { Worker, isMainThread, parentPort } from "node:worker_threads";
 
 type Deck = { name: string; config: MatchPlayerConfig };
 
@@ -29,7 +31,8 @@ type FlagKind =
   | "capability"
   | "blankName"
   | "noTarget"
-  | "oncePerTurn";
+  | "oncePerTurn"
+  | "hang";
 
 type Flag = {
   kind: FlagKind;
@@ -53,21 +56,31 @@ const baseSeed = Number(opt("seed", "1"));
 const onlyPair = opt("pair", "");
 const outFile = opt("out", "scripts/fuzz-report.json");
 const dumpLogs = args.includes("--log");
+const trace = args.includes("--trace");
+// one engine call that runs past this is stuck, which nothing else catches
+const limitMs = Number(opt("limit", "90")) * 1000;
+const jobs = Number(opt("jobs", String(Math.max(1, Math.min(6, os.availableParallelism() - 2)))));
 const deckFiles = args.filter((a, i) => a.endsWith(".json") && args[i - 1] !== "--out");
 
 const SEATS: MatchSeat[] = ["south", "north"];
 
-function loadDeckFile(file: string): Deck {
-  const d = JSON.parse(fs.readFileSync(file, "utf8")) as {
-    name?: string;
-    leader: string;
-    cards: Record<string, number>;
-  };
-  const mainDeck = Object.entries(d.cards).flatMap(([id, n]) => Array<string>(n).fill(id));
-  return { name: d.name ?? path.basename(file, ".json"), config: { leaderCardId: d.leader, mainDeck, donDeckCount: 10 } };
+// a file holds one deck in the app's saved shape, or a list of them
+function loadDeckFile(file: string): Deck[] {
+  type Saved = { name?: string; leader: string; cards: Record<string, number> };
+  const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Saved | Saved[];
+  return (Array.isArray(raw) ? raw : [raw]).map((d) => {
+    const problems = validateDeckForFormat("standard", [{ cardId: d.leader, quantity: 1 }, ...Object.entries(d.cards).map(([cardId, quantity]) => ({ cardId, quantity }))])
+      .rules.filter((r) => !r.passed)
+      .map((r) => r.message);
+    const name = d.name ?? path.basename(file, ".json");
+    if (problems.length && isMainThread) console.log(`${name}: ${problems.join("; ")}`);
+    const mainDeck = Object.entries(d.cards).flatMap(([id, n]) => Array<string>(n).fill(id));
+    return { name, config: { leaderCardId: d.leader, mainDeck, donDeckCount: 10 } };
+  });
 }
 
-const decks: Deck[] = [
+// --only plays just the decks from the files, against each other
+const builtIn: Deck[] = args.includes("--only") ? [] : [
   ...ONE_PIECE_PRECONSTRUCTED_DECKS.map((d) => ({
     name: d.code,
     config: {
@@ -80,8 +93,8 @@ const decks: Deck[] = [
     name: id,
     config: { leaderCardId: d.leaderId, mainDeck: [...d.mainDeck], donDeckCount: 10 },
   })),
-  ...deckFiles.map(loadDeckFile),
 ];
+const decks: Deck[] = [...builtIn, ...deckFiles.flatMap(loadDeckFile)];
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -222,6 +235,9 @@ function play(south: Deck, north: Deck, seed: number): GameResult {
 
     let result;
     try {
+      // a move that never comes back gives no flag; the last traced line names it
+      if (trace) fs.writeSync(2, `t${state.turnNumber} ${state.phase} ${JSON.stringify(cmd)}\n`);
+      parentPort?.postMessage({ t: "move", turn: state.turnNumber, cmd, cards: cardsIn(state, cmd) });
       result = applyCommand(state, cmd);
     } catch (e) {
       const err = e as Error;
@@ -292,26 +308,107 @@ if (onlyPair) {
   for (let i = 0; i < decks.length; i++) for (let j = i; j < decks.length; j++) pairs.push([decks[i], decks[j]]);
 }
 
+// Every game runs on a worker thread so a hang costs one game, not the run, and several
+// games go at once. Workers rebuild the same deck list from the same arguments.
+if (!isMainThread) {
+  parentPort!.on("message", ({ si, ni, seed }: { si: number; ni: number; seed: number }) => {
+    parentPort!.postMessage({ t: "done", game: play(decks[si], decks[ni], seed) });
+  });
+} else {
+  await main();
+}
+
+type Task = { pi: number; si: number; ni: number; seed: number };
+
+async function main() {
 const all: Flag[] = [];
 let games = 0;
 let finished = 0;
 let turnsTotal = 0;
 const started = Date.now();
+
+const tasks: Task[] = [];
 for (const [pi, [a, b]] of pairs.entries()) {
-  let pairFlags = 0;
   for (let r = 0; r < rounds; r++) {
-    const seed = baseSeed * 10007 + pi * 101 + r;
     const [south, north] = r % 2 ? [b, a] : [a, b];
-    const game = play(south, north, seed);
-    games++;
-    turnsTotal += game.turns;
-    if (game.finished) finished++;
-    all.push(...game.flags);
-    pairFlags += game.flags.length;
-    if (dumpLogs) console.log(`\n--- seed ${seed}: ${south.name} (south) vs ${north.name} (north)\n${game.log.join("\n")}`);
+    tasks.push({ pi, si: decks.indexOf(south), ni: decks.indexOf(north), seed: baseSeed * 10007 + pi * 101 + r });
   }
-  console.log(`${a.name} vs ${b.name}: ${rounds} games, ${pairFlags} flags`);
 }
+const left = pairs.map(() => rounds);
+const pairFlags = pairs.map(() => 0);
+const record = (task: Task, game: GameResult) => {
+  const [south, north] = [decks[task.si], decks[task.ni]];
+  games++;
+  turnsTotal += game.turns;
+  if (game.finished) finished++;
+  all.push(...game.flags);
+  pairFlags[task.pi] += game.flags.length;
+  if (dumpLogs) console.log(`\n--- seed ${task.seed}: ${south.name} (south) vs ${north.name} (north)\n${game.log.join("\n")}`);
+  if (--left[task.pi] === 0) {
+    const [a, b] = pairs[task.pi];
+    console.log(`${a.name} vs ${b.name}: ${rounds} games, ${pairFlags[task.pi]} flags`);
+  }
+};
+
+type Move = { turn: number; cmd: EngineCommand; cards: string[] };
+
+// one worker per slot, reused game after game; a hang or a crash costs a fresh one
+const slot = async () => {
+  let w: Worker | null = null;
+  while (next < tasks.length) {
+    const task = tasks[next++];
+    const worker = (w ??= new Worker(new URL(import.meta.url), { argv: args }));
+    let last: Move | null = null;
+    const game = await new Promise<GameResult | string>((resolve) => {
+      const done = (r: GameResult | string) => {
+        clearTimeout(timer);
+        worker.off("message", onMessage);
+        worker.off("error", onError);
+        resolve(r);
+      };
+      // the clock restarts on every move, so it measures one engine call, not a whole game
+      const expire = () => setTimeout(() => done(`no answer after ${limitMs / 1000}s`), limitMs);
+      let timer = expire();
+      const onMessage = (m: { t: string; game?: GameResult } & Partial<Move>) => {
+        if (m.t === "move") {
+          last = m as Move;
+          clearTimeout(timer);
+          timer = expire();
+        } else if (m.t === "done") done(m.game!);
+      };
+      const onError = (e: Error) => done(`worker died: ${e.message}`);
+      worker.on("message", onMessage);
+      worker.on("error", onError);
+      worker.postMessage(task);
+    });
+    if (typeof game !== "string") {
+      record(task, game);
+      continue;
+    }
+    void worker.terminate();
+    w = null;
+    const stuck = last as Move | null;
+    record(task, {
+      finished: false,
+      turns: stuck?.turn ?? 0,
+      log: [],
+      flags: [{
+        kind: "hang",
+        seed: task.seed,
+        south: decks[task.si].name,
+        north: decks[task.ni].name,
+        turn: stuck?.turn ?? 0,
+        cards: stuck?.cards ?? [],
+        detail: `${game}, last move ${JSON.stringify(stuck?.cmd ?? null)}`,
+        log: [],
+      }],
+    });
+  }
+  void w?.terminate();
+};
+
+let next = 0;
+await Promise.all(Array.from({ length: Math.min(jobs, tasks.length) }, slot));
 
 const unique = new Map<string, Flag & { count: number }>();
 for (const f of all) {
@@ -321,7 +418,7 @@ for (const f of all) {
   else unique.set(key, { ...f, count: 1 });
 }
 
-const kinds: FlagKind[] = ["exception", "rejected", "stuck", "turnCap", "capability", "oncePerTurn", "noTarget", "blankName"];
+const kinds: FlagKind[] = ["hang", "exception", "rejected", "stuck", "turnCap", "capability", "oncePerTurn", "noTarget", "blankName"];
 console.log(`\n${games} games, ${finished} finished, avg ${(turnsTotal / games).toFixed(1)} turns, ${((Date.now() - started) / 1000).toFixed(0)}s`);
 console.log(`${"kind".padEnd(14)}${"total".padStart(7)}${"unique".padStart(8)}`);
 for (const k of kinds) {
@@ -345,3 +442,4 @@ fs.writeFileSync(
   ),
 );
 console.log(`${unique.size} unique flags -> ${outFile}`);
+}
