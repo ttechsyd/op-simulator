@@ -12,7 +12,7 @@ import { Hand, OppHand, Phases, Seat } from "./Board";
 import { GameOver, PromptSheet, SetupSheet } from "./Overlays";
 import { Preview } from "./Preview";
 import { Tray, pickTargets, shownCard, trayMode } from "./Tray";
-import { Log } from "./Log";
+import { Log, battleNumbers, filler, logDetail, wording } from "./Log";
 import { BattleArrow, useCardMotion } from "./anim";
 import { useManualTurnStart } from "./turnStart";
 import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "./drag";
@@ -413,7 +413,9 @@ function Game({
   const drop = drag ? { ok: drag.targets, over: drag.over } : undefined;
   const endTurn = myTurn && legal.some((c) => c.type === "endTurn");
   const opp = view.players[BOT];
-  const logs = view.logs.slice(-4).reverse();
+  // the corner strip: the last few real moves, newest first, with the numbers that matter
+  const battles = useMemo(() => battleNumbers(state), [state.eventHistory]);
+  const logs = view.logs.filter((l) => !filler(l.message)).slice(-3).reverse();
 
   // the whole table is drawn at 960x430 and scaled to whatever screen it lands on
   const tableRef = useRef<HTMLDivElement>(null);
@@ -437,10 +439,12 @@ function Game({
   const [handUp, setHandUp] = useState(false);
   const handPos = drag ? "tuck" : handUp ? "up" : battleStep || tray === "pick" ? "half" : "";
 
-  const who = (id: string) => {
+  // mirror matches put Luffy against Luffy, so then the readout says whose
+  const fighter = (id: string) => {
     const c = state.cards[id];
-    const n = c.zone === "leader" ? "Leader" : cardName(c.cardId);
-    return c.owner === ME ? `Your ${n}` : `${opp.playerName}'s ${n}`;
+    const n = cardName(c.cardId);
+    const twin = battle && cardName(state.cards[battle.attackerId].cardId) === cardName(state.cards[battle.targetId].cardId);
+    return twin ? `${c.owner === ME ? "Your" : `${opp.playerName}'s`} ${n}` : n;
   };
   const turnLabel =
     state.status === "setup" ? "Setup"
@@ -467,7 +471,15 @@ function Game({
                 <button className="x" onClick={() => { if (confirm("Concede?")) send({ type: "concede", seat: ME }); }} aria-label="concede">✕</button>
               </div>
               <button className="loglines" onClick={() => setShowLog((v) => !v)}>
-                {logs.map((l) => <span key={l.id}>{l.message}</span>)}
+                {logs.map((l) => {
+                  const extra = logDetail(l, state, battles);
+                  return (
+                    <span key={l.id}>
+                      {wording(l.message)}
+                      {extra && <small> {extra}</small>}
+                    </span>
+                  );
+                })}
               </button>
             </>
           }
@@ -525,11 +537,11 @@ function Game({
           {thumb(shownCard(trigger, state))}
           <span>
             {cardName(state.cards[shownCard(trigger, state)].cardId)}
-            <small> {trigger.resolutionContext?.intent === "lifeTrigger" ? "has a [Trigger]" : trigger.details}</small>
+            <small> {trigger.resolutionContext?.intent === "lifeTrigger" ? "[Trigger]" : trigger.details}</small>
           </span>
           {trigger.options.map((o) => (
             <button key={o.id} className={o.id === "skip" ? "ghost" : ""} onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: trigger.id, optionId: o.id })}>
-              {o.label}
+              {o.id === "skip" ? "Skip" : o.id === "activate" ? "Use" : o.label}
             </button>
           ))}
         </div>
@@ -540,13 +552,11 @@ function Game({
             <small>
               {" "}
               {myPrompt.resolutionContext?.intent === "playCharacterReplacement"
-                ? "needs a space: trash 1 of your Characters"
-                : myPrompt.details || myPrompt.label}
+                ? "board full · trash 1"
+                : (myPrompt.details || myPrompt.label).replace(/\.$/, "")}
             </small>
           </span>
-          <span className="hint">
-            {myPrompt.maxSelections === 1 ? "Tap a lit card" : `Tap lit cards · ${picked.length}/${myPrompt.maxSelections}`}
-          </span>
+          {myPrompt.maxSelections > 1 && <span className="hint">{picked.length}/{myPrompt.maxSelections}</span>}
           {myPrompt.maxSelections > 1 && picked.length > 0 && (
             <button className="ghost" onClick={() => setPicked([])}>Clear</button>
           )}
@@ -567,7 +577,7 @@ function Game({
             <small>
               {" "}
               {quick.resolutionContext?.intent === "effectOptional"
-                ? `[${timingName(String(quick.context.trigger))}] effect, use it?`
+                ? `use [${timingName(String(quick.context.trigger))}]?`
                 : quick.details || quick.label}
             </small>
           </span>
@@ -592,7 +602,7 @@ function Game({
       ) : battle ? (
         <div className="battle-bar">
           <span>
-            {who(battle.attackerId)} {battle.attackPower} ⚔ {who(battle.targetId)} {defense}
+            {fighter(battle.attackerId)} {battle.attackPower} ⚔ {fighter(battle.targetId)} {defense}
             {battle.counterTotal > 0 && <small> (+{battle.counterTotal})</small>}
           </span>
           {battleStep && myPrompt ? (
@@ -602,22 +612,31 @@ function Game({
                   ? defense > battle.attackPower
                     ? "Holding"
                     : `Need +${battle.attackPower + 1000 - defense}`
-                  : "Drag a blocker onto the attacker"}
-                {battleStep === "counter" && stepIds.size > 0 && " · drag or tap a counter"}
-                {battleStep === "counter" && stepIds.size === 0 && " · no counters in hand"}
+                  : "Block?"}
+                {battleStep === "counter" && stepIds.size === 0 && " · no counters"}
               </span>
               <button onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [] })}>
                 {battleStep === "counter" ? (defense > battle.attackPower ? "Done" : "Take it") : "No block"}
               </button>
             </>
           ) : (
-            prompt && prompt.seat !== ME && <span className="hint">Opponent is deciding…</span>
+            prompt && prompt.seat !== ME && <span className="hint">Waiting…</span>
           )}
         </div>
       ) : null}
       <BattleArrow battle={battle} />
       <DragLayer drag={drag} />
-      {showLog && <Log logs={view.logs} onClose={() => setShowLog(false)} />}
+      {showLog && (
+        <Log
+          logs={view.logs}
+          state={state}
+          onCard={(cardId, instanceId) => {
+            const c = instanceId ? state.cards[instanceId] : null;
+            setPreview({ group: [{ instanceId, cardId, name: cardName(cardId), owner: c?.owner ?? ME, zone: c?.zone ?? "hand", rested: false, attachedDon: 0, lifeValue: null, power: null, cost: null, attribute: null, hidden: false }], start: 0 });
+          }}
+          onClose={() => setShowLog(false)}
+        />
+      )}
 
       {state.status === "setup" && <SetupSheet legal={legal} send={send} />}
       {myPrompt && tray && !trigger && !boardPick && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} picked={picked} setPicked={setPicked} send={send} press={press} />}

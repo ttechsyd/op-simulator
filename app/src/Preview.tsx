@@ -37,6 +37,8 @@ export function Preview({
   const cards = group.filter((c) => !c.hidden && c.cardId);
   const [picking, setPicking] = useState<{ id: string; a: PotentialCardCommandDescriptor } | null>(null);
   const strip = useRef<HTMLDivElement>(null);
+  // the tap that opened this fires its click a moment later, on the backdrop
+  const born = useRef(Date.now());
 
   useEffect(() => {
     const i = cards.findIndex((c) => c === group[start]);
@@ -76,7 +78,7 @@ export function Preview({
   };
 
   return (
-    <div className="preview" onClick={onClose}>
+    <div className="preview" onClick={() => Date.now() - born.current > 350 && onClose()}>
       <div
         className="strip"
         ref={strip}
