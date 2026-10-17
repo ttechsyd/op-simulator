@@ -120,7 +120,7 @@ function Life({ cards, press }: { cards: ProjectedCard[]; press?: Press }) {
           ),
         )}
       </div>
-      <span className="zlabel">Life {cards.length}</span>
+      <span className="zlabel">{cards.length ? `Life ${cards.length}` : "No life · next hit wins"}</span>
     </div>
   );
 }
