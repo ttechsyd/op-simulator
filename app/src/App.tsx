@@ -310,6 +310,11 @@ function Game({
   );
   const pick = (id: string) => {
     if (!myPrompt) return;
+    const option = myPrompt.choiceKind === "chooseOption" ? myPrompt.options.find((o) => o.targetId === id) : null;
+    if (option) {
+      send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, optionId: option.id });
+      return;
+    }
     if (myPrompt.maxSelections === 1) send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [id] });
     else setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < myPrompt.maxSelections ? [...p, id] : p));
   };
@@ -631,6 +636,8 @@ function Game({
                 ? "board full · trash 1"
                 : givingDon
                   ? "drag a rested DON!! over, or tap the card"
+                  : myPrompt.resolutionContext?.intent === "readyEffectOrder"
+                    ? "which effect first? tap its card"
                   : (myPrompt.details || myPrompt.label).replace(/\.$/, "")}
             </small>
           </span>

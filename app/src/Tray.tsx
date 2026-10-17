@@ -15,6 +15,9 @@ export function trayMode(p: PromptState): TrayMode | null {
   if (p.choiceKind === "confirm" && (rc?.intent === "lifeTrigger" || rc?.intent === "effectRevealFromLifePlay")) return "trigger";
   if (p.choiceKind === "chooseOption" && p.context.position === "topOrBottom") return "place";
   if (!p.options.length || !p.options.every((o) => o.targetId)) return null;
+  // several effects ready at once: the engine labels them by card name only, so two Kids
+  // read the same; tapping the card itself tells them apart (unless one card has two)
+  if (rc?.intent === "readyEffectOrder") return new Set(p.options.map((o) => o.targetId)).size === p.options.length ? "pick" : null;
   if (p.choiceKind === "orderCards") return "order";
   if (p.choiceKind === "selectCards" || p.choiceKind === "selectTargets" || p.choiceKind === "costPayment") return "pick";
   return null;
