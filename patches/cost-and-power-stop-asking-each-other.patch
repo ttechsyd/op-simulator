@@ -1,0 +1,88 @@
+diff --git a/submodules/one-piece/packages/engine/src/effects/permanent.ts b/submodules/one-piece/packages/engine/src/effects/permanent.ts
+index 06ed57ea..869d7223 100644
+--- a/submodules/one-piece/packages/engine/src/effects/permanent.ts
++++ b/submodules/one-piece/packages/engine/src/effects/permanent.ts
+@@ -792,6 +792,23 @@ export function evaluateContinuousCostEntry(
+   };
+ }
+ 
++// A permanent effect only reaches cards in the zones its target names, and a "self" effect
++// only its own card. Checking that before the effect's conditions keeps cost and power from
++// asking each other in circles: LittleOars Jr. (OP16-017) asks every Character's cost for
++// its power, and Thatch (OP16-005) asks every Character's power for a discount that only
++// applies to itself in hand. Evaluated blindly, each question fans out into the other until
++// a full board takes minutes to settle.
++function couldReach(
++  state: MatchState,
++  source: CardInstance,
++  target: { self?: boolean; zones?: readonly string[] },
++  targetInstanceId: string,
++): boolean {
++  if (target.self && source.instanceId !== targetInstanceId) return false;
++  const zone = state.cards[targetInstanceId]?.zone;
++  return !target.zones || !zone || target.zones.includes(zone);
++}
++
+ export function getContinuousCardCost(
+   state: MatchState,
+   targetInstanceId: string,
+@@ -812,7 +829,8 @@ export function getContinuousCardCost(
+         action.action === "modifyCost" &&
+         !action.paymentOnly &&
+         (!inHand || action.target.self) &&
+-        (action.target.count.amount === "all" || action.target.self)
++        (action.target.count.amount === "all" || action.target.self) &&
++        couldReach(state, source, action.target, targetInstanceId)
+           ? [{ source, effect, action, value: 0 }]
+           : [],
+       ),
+@@ -892,8 +910,10 @@ export function getPermanentModifierTotal(
+       }
+ 
+       for (const effect of card.effects?.permanentEffects ?? []) {
+-        const relevantActions = effect.actions.filter((action) =>
+-          actionIsDynamicModifier(action, type),
++        const relevantActions = effect.actions.filter(
++          (action) =>
++            actionIsDynamicModifier(action, type) &&
++            (!("target" in action) || couldReach(state, source, action.target, targetInstanceId)),
+         );
+         if (relevantActions.length === 0) {
+           continue;
+diff --git a/submodules/one-piece/packages/engine/tests/rules/04-cost-power-fan-out.test.ts b/submodules/one-piece/packages/engine/tests/rules/04-cost-power-fan-out.test.ts
+new file mode 100644
+index 00000000..2b9d09b9
+--- /dev/null
++++ b/submodules/one-piece/packages/engine/tests/rules/04-cost-power-fan-out.test.ts
+@@ -0,0 +1,31 @@
++import { expect, test } from "vite-plus/test";
++import { OnePieceTestEngine } from "../../src/index.ts";
++
++// LittleOars Jr. (OP16-017) reads every Character's cost for its own power; Thatch
++// (OP16-005) reads every Character's power for a discount that only applies to itself in
++// hand. Before effects were checked for reach ahead of their conditions, each read fanned
++// out into the other and this play from a real Red Ace game ran for minutes.
++test.each([
++  // Thatch on the field is a cost 8 Whitebeard Pirates Character, so the -4000 is off
++  { board: ["OP16-010", "OP16-004", "OP16-005", "OP16-005"], power: 8000 },
++  // Curiel tops out at cost 7 and Thatch only sits in hand, so the -4000 holds
++  { board: ["OP16-010", "OP16-004"], power: 4000 },
++])("playing LittleOars Jr. beside $board.length Characters settles at once", ({ board, power }) => {
++  const e = OnePieceTestEngine.create(
++    {
++      leaderCardId: "OP16-001",
++      character: board,
++      hand: ["OP16-017", "OP16-005", "OP16-005", "OP17-005", "OP16-003"],
++      activeDon: 6,
++    },
++    {
++      leaderCardId: "OP14-020",
++      character: ["ST32-002", "OP12-034", "OP12-023", "OP13-031", "OP13-031"],
++    },
++  );
++  const started = performance.now();
++  e.asSouth().play("OP16-017");
++  expect(performance.now() - started).toBeLessThan(2000);
++  const oars = e.getView("south").players.south.characters.find((c) => c?.cardId === "OP16-017");
++  expect(oars?.power).toBe(power);
++});
