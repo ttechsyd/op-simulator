@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["server/**", ".dockerignore", ".github/workflows/server.yml"]
+    paths: ["server/**", "patches/**", ".dockerignore", ".github/workflows/server.yml"]
 
 jobs:
   deploy:
