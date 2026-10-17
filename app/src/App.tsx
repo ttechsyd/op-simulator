@@ -753,7 +753,7 @@ function Game({
       )}
 
       {state.status === "setup" && (
-        <SetupSheet legal={legal} send={send} hand={view.players[ME].hand} onPeek={(i) => setPreview({ group: view.players[ME].hand, start: i })} />
+        <SetupSheet legal={legal} send={send} hand={view.players[ME].hand} mulliganed={state.setup.mulliganUsed[ME]} onPeek={(i) => setPreview({ group: view.players[ME].hand, start: i })} />
       )}
       {myPrompt && tray && !trigger && !boardPick && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} picked={picked} setPicked={setPicked} send={send} press={press} />}
       {myPrompt && !tray && !battleStep && !quick && <PromptSheet key={myPrompt.id} prompt={myPrompt} state={state} send={send} />}

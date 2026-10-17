@@ -131,11 +131,14 @@ export function SetupSheet({
   send,
   hand,
   onPeek,
+  mulliganed,
 }: {
   legal: LegalCommandDescriptor[];
   send: (c: EngineCommand) => void;
   hand: ProjectedCard[];
   onPeek: (i: number) => void;
+  // there is only one mulligan, and the new hand is kept without asking
+  mulliganed: boolean;
 }) {
   const cmds = legal.filter((c) => c.type !== "concede");
   if (!cmds.length) {
@@ -149,10 +152,10 @@ export function SetupSheet({
       : cmds[0].type === "chooseFirstPlayer"
         ? "You won the toss"
         : cmds[0].type === "startGame"
-          ? "Ready"
+          ? mulliganed ? "Your new hand" : "Ready"
           : "Keep this hand?";
   // the opening hand is the whole question, so it sits in the sheet at full size
-  const keeping = cmds.some((c) => c.type === "keepHand");
+  const keeping = hand.length > 0 && cmds.some((c) => c.type === "keepHand" || c.type === "startGame");
   return (
     <div className={`setup ${keeping ? "keep" : ""}`}>
       <h3>{title}</h3>
