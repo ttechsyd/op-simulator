@@ -17,6 +17,7 @@ import { BattleArrow, useCardMotion } from "./anim";
 import { useManualTurnStart } from "./turnStart";
 import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "./drag";
 import { BOT, DECKS, ME, localTable, newMatch, pendingPrompt, seatToShow, sitAt, useMatch, type DeckId, type Mode, type Table } from "./match";
+import type { Level } from "./bot";
 import { Lobby } from "./Lobby";
 import { forgetRoom } from "./net";
 import { cardCounter, cardImage, cardName, timingName } from "./cards";
@@ -31,9 +32,14 @@ export default function App() {
   const [mine, setMine] = useState<DeckId>(params.get("mine") ?? "pre:ST01");
   const [theirs, setTheirs] = useState<DeckId>(params.get("theirs") ?? "red-aggro");
   const [mode, setMode] = useState<Mode>(params.get("mode") === "self" ? "self" : params.get("mode") === "online" ? "online" : "bot");
+  const [level, setLevel] = useState<Level>(() => (localStorage.getItem("opsim.level") === "hard" ? "hard" : "normal"));
+  const pickLevel = (l: Level) => {
+    setLevel(l);
+    localStorage.setItem("opsim.level", l);
+  };
   const [match, setMatch] = useState<{ table: Table; seat: MatchSeat } | null>(() =>
     params.has("seed") && mode !== "online"
-      ? { table: localTable(newMatch(mine, theirs, mode, Number(params.get("seed"))), mode), seat: "south" }
+      ? { table: localTable(newMatch(mine, theirs, mode, Number(params.get("seed"))), mode, level), seat: "south" }
       : null,
   );
   const [screen, setScreen] = useState<"menu" | "setup" | "decks" | "lobby" | { view: Deck } | { edit: Deck }>("menu");
@@ -114,10 +120,19 @@ export default function App() {
               </select>
             </label>
           )}
+          {mode === "bot" && (
+            <label>
+              Difficulty
+              <div className="seg">
+                <button className={level === "normal" ? "on" : ""} onClick={() => pickLevel("normal")}>Normal</button>
+                <button className={level === "hard" ? "on" : ""} onClick={() => pickLevel("hard")}>Hard</button>
+              </div>
+            </label>
+          )}
           {mode === "online" ? (
             <button onClick={() => setScreen("lobby")}>Find a game</button>
           ) : (
-            <button onClick={() => setMatch({ table: localTable(newMatch(mine, theirs, mode), mode), seat: "south" })}>Play</button>
+            <button onClick={() => setMatch({ table: localTable(newMatch(mine, theirs, mode), mode, level), seat: "south" })}>Play</button>
           )}
           <button className="ghost" onClick={() => setScreen("menu")}>Back</button>
         </div>

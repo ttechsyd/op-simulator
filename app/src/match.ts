@@ -16,6 +16,7 @@ import {
 } from "@tcg/op-engine";
 
 import { loadDecks, mainDeckList, preconDecks } from "./decks";
+import { hardChoice, type Level } from "./bot";
 
 // which seat the screen belongs to. Against the bot it's always south; playing both
 // sides from one phone it follows whoever has to act, so everything that reads these
@@ -97,7 +98,7 @@ export type TableEvent =
   // only a remote table says anything about the wire
   | { kind: "link"; me: "connecting" | "online" | "reconnecting"; peer: boolean };
 
-export function localTable(initial: MatchState, mode: Mode): Table {
+export function localTable(initial: MatchState, mode: Mode, level: Level = "normal"): Table {
   let state = initial;
   // your own moves can be taken back until the bot answers one, like asking across
   // the table "wait, I meant the other one"; the bot never argues
@@ -134,11 +135,13 @@ export function localTable(initial: MatchState, mode: Mode): Table {
     wakeBot();
   };
 
+  // the bot thinks inside the timer, so the screen gets to draw the last move first
   const wakeBot = () => {
     clearTimeout(botTimer);
-    const cmd = botCommand(state, mode);
-    if (!cmd) return;
-    botTimer = setTimeout(() => send(cmd), state.status === "setup" ? 250 : 550);
+    botTimer = setTimeout(() => {
+      const cmd = botCommand(state, mode, level);
+      if (cmd) send(cmd);
+    }, state.status === "setup" ? 250 : 550);
   };
 
   wakeBot();
@@ -165,7 +168,7 @@ export function localTable(initial: MatchState, mode: Mode): Table {
 const rng = { random: Math.random };
 const setupTypes = new Set(["chooseJoKenPo", "chooseFirstPlayer", "mulligan", "keepHand", "startGame"]);
 
-function botCommand(state: MatchState, mode: Mode): EngineCommand | null {
+function botCommand(state: MatchState, mode: Mode, level: Level): EngineCommand | null {
   const prompt = pendingPrompt(state);
   if (prompt) {
     // rules questions the engine asks of nobody in particular get answered either way
@@ -180,7 +183,7 @@ function botCommand(state: MatchState, mode: Mode): EngineCommand | null {
   }
   if (state.status === "active" && state.activeSeat === BOT) {
     const legal = getLegalCommands(state, BOT);
-    const chosen = heuristicAgent.choose(state, BOT, legal, rng);
+    const chosen = level === "hard" ? hardChoice(state, BOT) : heuristicAgent.choose(state, BOT, legal, rng);
     if (chosen) return chosen;
     return legal.some((c) => c.type === "endTurn") ? { type: "endTurn", seat: BOT } : null;
   }
