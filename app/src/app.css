@@ -455,9 +455,8 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 .log-line { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 6px; }
 .log-line.me { color: var(--ink); }
 .log-line.phase { font-size: 10px; opacity: 0.6; }
-.log-line.card { cursor: pointer; }
-.log-line.card:active { background: rgba(255,255,255,0.06); }
-.log-line img { width: 18px; aspect-ratio: 0.716; border-radius: 2px; flex: none; object-fit: cover; }
+.log-line.tap { cursor: pointer; }
+.log-line.tap:active { background: rgba(255,255,255,0.06); }
 .log-line > span { flex: 1; min-width: 0; }
 .log-line small { color: var(--accent); font-weight: 600; }
 .log-body .turn { display: block; color: var(--accent); font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin: 6px 0 2px; }
