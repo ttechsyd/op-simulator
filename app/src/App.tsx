@@ -25,6 +25,8 @@ import { cardCounter, cardImage, cardName, skillWantsDon, timingName } from "./c
 import { Builder, DeckList, DeckView } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from "./decks";
 import { appReady, applyUpdate, bundleVersion, checkForUpdate, installApk, type Check } from "./update";
+import { startPresence, useUser } from "./online/auth";
+import { Account, UsernameSheet } from "./online/Gate";
 
 // ?seed=123&mine=red-aggro&theirs=st01 skips the menu, handy for replaying a hand
 const params = new URLSearchParams(location.search);
@@ -45,6 +47,8 @@ export default function App() {
   );
   const [screen, setScreen] = useState<"menu" | "setup" | "decks" | "lobby" | { view: Deck } | { edit: Deck }>("menu");
   const [saved, setSaved] = useState(loadDecks);
+  const { user, named } = useUser();
+  useEffect(() => (user?.uid ? startPresence(user.uid) : undefined), [user?.uid]);
   const [check, setCheck] = useState<Check | "checking" | null>(null);
   const [pct, setPct] = useState<number | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
@@ -74,7 +78,7 @@ export default function App() {
   }, []);
 
   if (!match && screen === "lobby") {
-    return <Lobby deck={mine} onBack={() => setScreen("setup")} onStart={(table, seat) => { setScreen("menu"); setMatch({ table, seat }); }} />;
+    return <Lobby deck={mine} username={user?.username} onBack={() => setScreen("setup")} onStart={(table, seat) => { setScreen("menu"); setMatch({ table, seat }); }} />;
   }
   if (!match && screen === "decks") {
     return (
@@ -146,6 +150,9 @@ export default function App() {
     return (
       <div className="menu">
         <h1>OP Sim</h1>
+        {/* TODO phase b: the name button opens the friends screen */}
+        <Account user={user} badge={0} onFriends={() => {}} />
+        {user && !user.username && <UsernameSheet uid={user.uid} onDone={named} />}
         <button onClick={() => pick("bot")}>Player vs AI</button>
         <button onClick={() => pick("self")}>Solo, both sides</button>
         <button onClick={() => pick("online")}>Online with a friend</button>

@@ -8,6 +8,10 @@ const config: CapacitorConfig = {
     backgroundColor: "#15202b",
   },
   plugins: {
+    FirebaseAuthentication: {
+      skipNativeAuth: false,
+      providers: ["google.com"],
+    },
     CapacitorUpdater: {
       // we drive updates ourselves from the menu
       autoUpdate: false,

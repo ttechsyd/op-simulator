@@ -6,7 +6,7 @@ import { forgetRoom, openRoom, savedRoom, serverUrl, type Ask } from "./net";
 type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "waiting"; code: string } | { kind: "error"; text: string };
 
 // make a room and read its code to a friend, or type theirs in
-export function Lobby({ deck, onStart, onBack }: { deck: DeckId; onStart: (table: Table, seat: MatchSeat) => void; onBack: () => void }) {
+export function Lobby({ deck, username, onStart, onBack }: { deck: DeckId; username?: string | null; onStart: (table: Table, seat: MatchSeat) => void; onBack: () => void }) {
   const [name, setName] = useState(() => localStorage.getItem("opsim.name") ?? "");
   const [code, setCode] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
@@ -22,7 +22,8 @@ export function Lobby({ deck, onStart, onBack }: { deck: DeckId; onStart: (table
     localStorage.setItem("opsim.server", server);
     setStatus({ kind: "busy", text: "Connecting…" });
     let seat: MatchSeat = "south";
-    pending.current = openRoom(ask, { name: name || "Player", deck: playerConfig(deck, name) }, {
+    const shown = username || name || "Player";
+    pending.current = openRoom(ask, { name: shown, deck: playerConfig(deck, shown) }, {
       room: (r) => {
         seat = r.seat;
         setStatus({ kind: "waiting", code: r.code });
@@ -62,10 +63,14 @@ export function Lobby({ deck, onStart, onBack }: { deck: DeckId; onStart: (table
         </>
       ) : (
         <>
-          <label>
-            Your name
-            <input value={name} maxLength={20} onChange={(e) => setName(e.target.value)} placeholder="Player" />
-          </label>
+          {username ? (
+            <p className="hint">Playing as {username}</p>
+          ) : (
+            <label>
+              Your name
+              <input value={name} maxLength={20} onChange={(e) => setName(e.target.value)} placeholder="Player" />
+            </label>
+          )}
           {status.kind === "error" && <p className="hint bad">{status.text}</p>}
           {saved && <button onClick={() => go({ resume: saved })}>Rejoin room {saved.code}</button>}
           <button onClick={() => go({ create: true })}>Create a room</button>

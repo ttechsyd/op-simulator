@@ -332,6 +332,15 @@ button small { display: block; font-size: 10px; color: var(--muted); }
 .sheet.wide { width: min(760px, 100%); }
 .sheet h3 { margin: 0 0 6px; }
 .hint { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+.bad { color: #ff7b7b; }
+
+/* who you are, on the menu: a name with a photo, or the way to get one */
+.account { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 6px; }
+.account button.ghost { display: inline-flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 14px; }
+.account img { width: 22px; height: 22px; border-radius: 50%; }
+.account .badge { min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: #402310; font-size: 11px; font-weight: 700; line-height: 18px; }
+.account small { font-size: 11px; }
+.sheet input { width: 100%; box-sizing: border-box; font: inherit; padding: 10px; border-radius: 8px; background: var(--bg); color: var(--ink); border: 1px solid #3e556b; }
 .battle-line { color: var(--accent); font-weight: 600; margin: 0 0 6px; font-size: 14px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .options { display: flex; flex-wrap: wrap; gap: 8px; }

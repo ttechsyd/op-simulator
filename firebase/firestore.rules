@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function me() { return request.auth.uid; }
+    function signedIn() { return request.auth != null; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function pairId(a, b) { return a < b ? a + "_" + b : b + "_" + a; }
+    function friends(a, b) { return exists(/databases/$(database)/documents/friendships/$(pairId(a, b))); }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if me() == uid;
+      allow update: if me() == uid && changed().hasOnly(["username", "usernameLower", "photo", "fcmTokens"]);
+
+      // nudges and invites are written by the room server; the owner only reads and clears them
+      match /inbox/{id} {
+        allow read, update, delete: if me() == uid;
+        allow create: if false;
+      }
+    }
+
+    // one username per player: the claim only passes when the user doc ends up pointing at it
+    match /usernames/{lower} {
+      allow read: if true;
+      allow create: if me() == request.resource.data.uid
+        && getAfter(/databases/$(database)/documents/users/$(me())).data.usernameLower == lower;
+    }
+
+    match /friendRequests/{id} {
+      allow read: if signedIn() && (me() == resource.data.from || me() == resource.data.to);
+      allow create: if me() == request.resource.data.from
+        && id == request.resource.data.from + "_" + request.resource.data.to
+        && request.resource.data.from != request.resource.data.to
+        && !friends(request.resource.data.from, request.resource.data.to);
+      allow delete: if signedIn() && (me() == resource.data.from || me() == resource.data.to);
+    }
+
+    // the one who accepts creates the friendship and deletes the request in the same batch
+    match /friendships/{id} {
+      allow read, delete: if signedIn() && me() in resource.data.uids;
+      allow create: if signedIn()
+        && me() in request.resource.data.uids
+        && request.resource.data.uids.size() == 2
+        && id == pairId(request.resource.data.uids[0], request.resource.data.uids[1])
+        && (
+          exists(/databases/$(database)/documents/friendRequests/$(request.resource.data.uids[0] + "_" + me()))
+          || exists(/databases/$(database)/documents/friendRequests/$(request.resource.data.uids[1] + "_" + me()))
+        );
+    }
+
+    match /chats/{id} {
+      allow read: if signedIn() && me() in resource.data.uids;
+      allow create: if signedIn() && me() in request.resource.data.uids
+        && id == pairId(request.resource.data.uids[0], request.resource.data.uids[1])
+        && friends(request.resource.data.uids[0], request.resource.data.uids[1]);
+      allow update: if signedIn() && me() in resource.data.uids && changed().hasOnly(["last", "unread", "names"]);
+
+      match /messages/{mid} {
+        allow read: if signedIn() && me() in get(/databases/$(database)/documents/chats/$(id)).data.uids;
+        allow create: if signedIn() && request.resource.data.from == me()
+          && me() in get(/databases/$(database)/documents/chats/$(id)).data.uids
+          && request.resource.data.text is string && request.resource.data.text.size() <= 500;
+      }
+    }
+
+    match /decks/{id} {
+      allow read: if true;
+      allow create: if me() == request.resource.data.author && request.resource.data.count == 50;
+      allow delete: if signedIn() && me() == resource.data.author;
+      allow update: if signedIn() && (
+        (me() == resource.data.author && changed().hasOnly(["name", "nameLower"]))
+        || changed().hasOnly(["likes", "copies"])
+      );
+
+      match /likes/{uid} {
+        allow read: if true;
+        allow create, delete: if me() == uid;
+      }
+    }
+
+    // only the room server writes match records
+    match /matches/{id} {
+      allow read: if signedIn() && me() in resource.data.uids;
+      allow write: if false;
+    }
+  }
+}
