@@ -31,6 +31,7 @@ import { configured } from "./online/firebase";
 import { Friends } from "./online/Friends";
 import { Chat } from "./online/Chat";
 import { GlobalDecks } from "./online/GlobalDecks";
+import { History } from "./online/History";
 import { useInbox, useRequests, useUnread, type Friend } from "./online/social";
 import { MatchChat } from "./MatchChat";
 import { onForeground, registerPush, takeIntent } from "./online/push";
@@ -52,7 +53,7 @@ export default function App() {
       ? { table: localTable(newMatch(mine, theirs, mode, Number(params.get("seed"))), mode, level), seat: "south" }
       : null,
   );
-  const [screen, setScreen] = useState<"menu" | "setup" | "decks" | "lobby" | "friends" | "library" | { view: Deck } | { edit: Deck } | { chat: Friend }>("menu");
+  const [screen, setScreen] = useState<"menu" | "setup" | "decks" | "lobby" | "friends" | "library" | "history" | { view: Deck } | { edit: Deck } | { chat: Friend }>("menu");
   // an invite in hand: the code to walk into, or the friend to make a room for
   const [joinCode, setJoinCode] = useState<string | null>(null);
   const [inviteTo, setInviteTo] = useState<Friend | null>(null);
@@ -148,6 +149,9 @@ export default function App() {
   if (!match && typeof screen === "object" && "chat" in screen && user) {
     return <Chat me={user} friend={screen.chat} onBack={() => setScreen("friends")} />;
   }
+  if (!match && screen === "history" && user) {
+    return <History user={user} onBack={() => setScreen("menu")} />;
+  }
   if (!match && screen === "library") {
     return <GlobalDecks user={user ?? null} onBack={() => setScreen("menu")} onCopied={() => setSaved(loadDecks())} />;
   }
@@ -229,6 +233,7 @@ export default function App() {
         <button onClick={() => pick("online")}>Online with a friend</button>
         <button className="ghost" onClick={() => setScreen("decks")}>Decks</button>
         {configured && <button className="ghost" onClick={() => setScreen("library")}>Global Decks</button>}
+        {user?.username && <button className="ghost" onClick={() => setScreen("history")}>History</button>}
         {release && (
           <div className="update">
             <span>
