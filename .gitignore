@@ -7,4 +7,5 @@ scripts/fuzz-report.json
 # firebase: the android app's config and the server's admin key never go in
 app/android/app/google-services.json
 server/.secrets/
+server/logs/
 scripts/fuzz-*.json

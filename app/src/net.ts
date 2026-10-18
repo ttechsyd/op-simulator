@@ -6,10 +6,12 @@ import { idToken } from "./online/auth";
 enablePatches();
 
 const params = new URLSearchParams(location.search);
-const DEFAULT_SERVER = import.meta.env.DEV ? "ws://localhost:8787" : "wss://op-simulator.fly.dev";
+export const DEFAULT_SERVER = import.meta.env.DEV ? "ws://localhost:8787" : "wss://op-sim.macroservices.space";
 
 export function serverUrl() {
-  return params.get("server") ?? localStorage.getItem("opsim.server") ?? DEFAULT_SERVER;
+  const saved = localStorage.getItem("opsim.server");
+  // the fly app never went up, but the lobby saved its address on every phone that opened it
+  return params.get("server") ?? (saved && !saved.includes("fly.dev") ? saved : DEFAULT_SERVER);
 }
 
 export interface Room {

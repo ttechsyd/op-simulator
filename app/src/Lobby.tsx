@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { MatchSeat } from "@tcg/op-engine";
 import { playerConfig, type DeckId, type Table } from "./match";
-import { forgetRoom, openRoom, savedRoom, serverUrl, type Ask } from "./net";
+import { DEFAULT_SERVER, forgetRoom, openRoom, savedRoom, serverUrl, type Ask } from "./net";
 import { api, type Friend } from "./online/social";
 
 type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "waiting"; code: string } | { kind: "error"; text: string };
@@ -39,7 +39,8 @@ export function Lobby({
 
   const go = (ask: Ask) => {
     localStorage.setItem("opsim.name", name);
-    localStorage.setItem("opsim.server", server);
+    if (server === DEFAULT_SERVER) localStorage.removeItem("opsim.server");
+    else localStorage.setItem("opsim.server", server);
     setStatus({ kind: "busy", text: "Connecting…" });
     let seat: MatchSeat = "south";
     const shown = username || name || "Player";
