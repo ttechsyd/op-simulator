@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type {
+  MatchSeat,
   EngineCommand,
   LegalCommandDescriptor,
   MatchState,
@@ -194,14 +195,40 @@ function commandFor(c: LegalCommandDescriptor): EngineCommand {
   }
 }
 
-export function GameOver({ state, onQuit }: { state: MatchState; onQuit: () => void }) {
+export function GameOver({
+  state,
+  oppName,
+  onQuit,
+  onRematch,
+  rematchFrom,
+}: {
+  state: MatchState;
+  oppName: string;
+  onQuit: () => void;
+  // only an online table can offer another go
+  onRematch?: () => void;
+  rematchFrom?: MatchSeat | null;
+}) {
+  const [asked, setAsked] = useState(false);
   const won = state.winner === ME;
+  const theyAsked = !!rematchFrom && rematchFrom !== ME;
   return (
     <Sheet>
-      <h3>{won ? "You win" : "Bot wins"}</h3>
-      <p className="hint">{state.finishReason ?? ""}</p>
+      <h3>{won ? "You win" : `${oppName} wins`}</h3>
+      <p className="hint">{theyAsked ? `${oppName} wants a rematch` : (state.finishReason ?? "")}</p>
       <div className="actions">
-        <button onClick={onQuit}>Back to menu</button>
+        <button className="ghost" onClick={onQuit}>Back to menu</button>
+        {onRematch && (
+          <button
+            disabled={asked && !theyAsked}
+            onClick={() => {
+              setAsked(true);
+              onRematch();
+            }}
+          >
+            {theyAsked ? "Accept rematch" : asked ? "Waiting for them…" : "Rematch"}
+          </button>
+        )}
       </div>
     </Sheet>
   );

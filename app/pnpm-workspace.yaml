@@ -1,2 +1,5 @@
+# esbuild needs its install script; the other two only build native speedups we can skip
 allowBuilds:
   esbuild: true
+  "@firebase/util": false
+  protobufjs: false

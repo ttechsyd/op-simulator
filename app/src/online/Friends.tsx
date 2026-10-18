@@ -20,11 +20,13 @@ export function Friends({
   onBack,
   onChat,
   onInvite,
+  onJoin,
 }: {
   user: User;
   onBack: () => void;
   onChat?: (f: Friend) => void;
   onInvite?: (f: Friend) => void;
+  onJoin?: (code: string) => void;
 }) {
   const [friends, setFriends] = useState<Friend[] | null>(null);
   const [add, setAdd] = useState("");
@@ -69,6 +71,7 @@ export function Friends({
               <span>
                 <b>{i.fromName}</b> {i.kind === "invite" ? `invited you · room ${i.code}` : "wants to play"} <small>{ago(i.at)}</small>
               </span>
+              {i.kind === "invite" && i.code && onJoin && <button className="small" onClick={() => { inbox.clear(i.id); onJoin(i.code!); }}>Join</button>}
               <button className="small ghost" onClick={() => inbox.clear(i.id)}>Clear</button>
             </div>
           ))}

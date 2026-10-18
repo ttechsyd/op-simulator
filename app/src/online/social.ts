@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react";
 import {
+  addDoc,
   collection,
   deleteDoc,
   doc,
   getDoc,
   getDocs,
+  increment,
+  limit,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
+  startAfter,
   updateDoc,
   where,
   writeBatch,
@@ -134,4 +139,56 @@ export async function api(path: string, body: unknown): Promise<{ ok: true } | {
   } catch {
     return { ok: false, error: `Can't reach ${base}` };
   }
+}
+
+export type Message = { id: string; from: string; text: string; at: number };
+
+const msgOf = (d: { id: string; data(): Record<string, unknown> }): Message => ({
+  id: d.id,
+  from: d.data().from as string,
+  text: d.data().text as string,
+  at: (d.data().at as { toMillis?: () => number } | null)?.toMillis?.() ?? Date.now(),
+});
+
+// the last 30 stay live; anything older is paged in on demand
+export function useMessages(me: string, them: string) {
+  const [msgs, setMsgs] = useState<Message[]>([]);
+  useEffect(() => {
+    setMsgs([]);
+    return onSnapshot(query(collection(db, "chats", pairId(me, them), "messages"), orderBy("at", "desc"), limit(30)), (snap) =>
+      setMsgs(snap.docs.map(msgOf).reverse()),
+    );
+  }, [me, them]);
+  return msgs;
+}
+
+export async function loadOlder(me: string, them: string, before: number) {
+  const snap = await getDocs(
+    query(collection(db, "chats", pairId(me, them), "messages"), orderBy("at", "desc"), startAfter(new Date(before)), limit(30)),
+  );
+  return snap.docs.map(msgOf).reverse();
+}
+
+export async function sendMessage(me: { uid: string; name: string }, them: Friend, text: string) {
+  const id = pairId(me.uid, them.uid);
+  const chat = doc(db, "chats", id);
+  if (!(await getDoc(chat)).exists())
+    await setDoc(chat, { uids: [me.uid, them.uid].sort(), names: { [me.uid]: me.name, [them.uid]: them.name }, last: null, unread: {} });
+  await addDoc(collection(chat, "messages"), { from: me.uid, text, at: serverTimestamp() });
+  await updateDoc(chat, { last: { from: me.uid, text, at: serverTimestamp() }, [`unread.${them.uid}`]: increment(1) });
+  // only wakes a closed phone; an open one already sees the message
+  api("/dm", { to: them.uid, text }).catch(() => {});
+}
+
+export const markRead = (me: string, them: string) => updateDoc(doc(db, "chats", pairId(me, them)), { [`unread.${me}`]: 0 }).catch(() => {});
+
+export function useUnread(me: string | null) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!me) return;
+    return onSnapshot(query(collection(db, "chats"), where("uids", "array-contains", me)), (snap) =>
+      setCount(snap.docs.reduce((n, d) => n + ((d.data().unread as Record<string, number> | undefined)?.[me] ?? 0), 0)),
+    );
+  }, [me]);
+  return count;
 }

@@ -88,6 +88,8 @@ export type Table = {
   send(cmd: EngineCommand): void;
   // only there while something can be taken back; a remote table won't offer it
   readonly undo?: () => void;
+  // and only a remote table has someone on the other side to talk to
+  readonly chat?: { say(text: string): void; emote(id: string): void; rematch(): void };
   subscribe(fn: (ev: TableEvent) => void): () => void;
   close(): void;
 };
@@ -96,7 +98,10 @@ export type TableEvent =
   | { kind: "changed" }
   | { kind: "rejected"; reason: string }
   // only a remote table says anything about the wire
-  | { kind: "link"; me: "connecting" | "online" | "reconnecting"; peer: boolean };
+  | { kind: "link"; me: "connecting" | "online" | "reconnecting"; peer: boolean }
+  | { kind: "chat"; from: MatchSeat; text: string; at: number }
+  | { kind: "emote"; from: MatchSeat; id: string; at: number }
+  | { kind: "rematch"; seat: MatchSeat };
 
 export function localTable(initial: MatchState, mode: Mode, level: Level = "normal"): Table {
   let state = initial;
@@ -196,6 +201,9 @@ export function useMatch(table: Table) {
   const [undo, setUndo] = useState(() => table.undo ?? null);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<{ me: "connecting" | "online" | "reconnecting"; peer: boolean } | null>(null);
+  const [messages, setMessages] = useState<{ from: MatchSeat; text: string; at: number }[]>([]);
+  const [emote, setEmote] = useState<{ from: MatchSeat; id: string; at: number } | null>(null);
+  const [rematchFrom, setRematchFrom] = useState<MatchSeat | null>(null);
 
   useEffect(() => {
     const off = table.subscribe((ev) => {
@@ -207,6 +215,20 @@ export function useMatch(table: Table) {
         setLink({ me: ev.me, peer: ev.peer });
         return;
       }
+      if (ev.kind === "chat") {
+        setMessages((m) => [...m, { from: ev.from, text: ev.text, at: ev.at }]);
+        return;
+      }
+      if (ev.kind === "emote") {
+        setEmote({ from: ev.from, id: ev.id, at: ev.at });
+        return;
+      }
+      if (ev.kind === "rematch") {
+        setRematchFrom(ev.seat);
+        return;
+      }
+      // a fresh match means the rematch went through
+      if (table.state.status === "active" && table.state.turnNumber <= 1) setRematchFrom(null);
       setState(table.state);
       setUndo(() => table.undo ?? null);
     });
@@ -222,5 +244,5 @@ export function useMatch(table: Table) {
     return () => clearTimeout(t);
   }, [error]);
 
-  return { state, send: table.send, error, undo, link };
+  return { state, send: table.send, error, undo, link, chat: table.chat, messages, emote, rematchFrom };
 }

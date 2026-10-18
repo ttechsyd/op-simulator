@@ -1,6 +1,7 @@
 import { applyPatches, enablePatches, type Patch } from "immer";
 import type { EngineCommand, MatchPlayerConfig, MatchSeat, MatchState } from "@tcg/op-engine";
 import type { Table, TableEvent } from "./match";
+import { idToken } from "./online/auth";
 
 enablePatches();
 
@@ -71,6 +72,11 @@ export function openRoom(
     send(cmd: EngineCommand) {
       say({ t: "cmd", cmd });
     },
+    chat: {
+      say: (text) => say({ t: "chat", text }),
+      emote: (id) => say({ t: "emote", id }),
+      rematch: () => say({ t: "rematch" }),
+    },
     subscribe(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);
@@ -87,17 +93,19 @@ export function openRoom(
   const connect = () => {
     if (closed) return;
     ws = new WebSocket(serverUrl());
-    ws.onopen = () => {
+    ws.onopen = async () => {
       retry = 0;
-      if (room) say({ t: "resume", code: room.code, token: room.token });
-      else if ("resume" in ask) say({ t: "resume", code: ask.resume.code, token: ask.resume.token });
-      else if ("join" in ask) say({ t: "join", code: ask.join, name: me.name, deck });
-      else say({ t: "create", name: me.name, deck });
+      // a signed-in player is known to the server by account, a guest by the seat token
+      const auth = (await idToken()) ?? undefined;
+      if (room) say({ t: "resume", code: room.code, token: room.token, auth });
+      else if ("resume" in ask) say({ t: "resume", code: ask.resume.code, token: ask.resume.token, auth });
+      else if ("join" in ask) say({ t: "join", code: ask.join, name: me.name, deck, auth });
+      else say({ t: "create", name: me.name, deck, auth });
     };
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.t === "room") {
-        room = { code: m.code, seat: m.seat, token: m.token };
+        room = { code: m.code, seat: m.seat, token: m.token ?? "" };
         localStorage.setItem(SAVED, JSON.stringify({ ...room, at: Date.now() }));
         on.room(room);
         setLink({ me: "online", peer: !!m.peer });
@@ -118,6 +126,12 @@ export function openRoom(
         emit({ kind: "changed" });
       } else if (m.t === "rejected") {
         emit({ kind: "rejected", reason: m.reason });
+      } else if (m.t === "chat") {
+        emit({ kind: "chat", from: m.from, text: m.text, at: m.at });
+      } else if (m.t === "emote") {
+        emit({ kind: "emote", from: m.from, id: m.id, at: Date.now() });
+      } else if (m.t === "rematch") {
+        emit({ kind: "rematch", seat: m.seat });
       } else if (m.t === "peer") {
         setLink({ peer: m.online });
       } else if (m.t === "error") {

@@ -12,7 +12,7 @@ import {
 } from "@tcg/op-engine";
 import { hasCard } from "@tcg/op-cards";
 import { api } from "./api";
-import { profile, verify } from "./fire";
+import { live, profile, recordMatch, verify } from "./fire";
 
 // One room per match, kept in memory. The creator sits south, the joiner north. Each
 // player gets a token so a phone that drops its socket can pick the seat back up.
@@ -33,7 +33,15 @@ interface Room {
   // bumps on every state change so a client can tell when it missed one
   v: number;
   touched: number;
+  // how many games this pair has played here; the first player alternates
+  games: number;
+  startedAt: number;
+  recorded: boolean;
+  rematch: Partial<Record<MatchSeat, true>>;
+  lastChat: Partial<Record<MatchSeat, number>>;
 }
+
+const EMOTES = new Set(["gg", "nice", "think", "oops", "hurry", "wow"]);
 
 const rooms = new Map<string, Room>();
 const ROOM_IDLE_MS = 30 * 60_000;
@@ -66,8 +74,12 @@ const tell = (room: Room, msg: unknown) => {
 function startMatch(room: Room) {
   const south = room.players.south!;
   const north = room.players.north!;
+  room.games++;
+  room.startedAt = Date.now();
+  room.recorded = false;
+  room.rematch = {};
   room.state = createMatch({
-    firstPlayer: "south",
+    firstPlayer: room.games % 2 ? "south" : "north",
     seed: Date.now() ^ (Math.random() * 0xffffffff),
     shuffleDecks: true,
     skipFirstTurnDraw: true,
@@ -108,6 +120,28 @@ function play(room: Room, seat: MatchSeat, cmd: EngineCommand) {
   room.v++;
   room.touched = Date.now();
   tell(room, { t: "patch", v: room.v, patches });
+  if (room.state.status === "finished" && !room.recorded) {
+    room.recorded = true;
+    record(room);
+  }
+}
+
+// two signed-in players get the result on their records; anyone else just played
+function record(room: Room) {
+  const { south, north } = room.players;
+  const s = room.state!;
+  if (!live || !south?.uid || !north?.uid || south.uid === north.uid) return;
+  const uidOf = (seat: MatchSeat) => room.players[seat]!.uid!;
+  recordMatch({
+    id: `${room.code}-${room.startedAt}`,
+    uids: [south.uid, north.uid],
+    names: { [south.uid]: south.name, [north.uid]: north.name },
+    leaders: { [south.uid]: south.deck.leaderCardId, [north.uid]: north.deck.leaderCardId },
+    winner: s.winner ? uidOf(s.winner) : null,
+    reason: s.finishReason ?? "",
+    turns: s.turnNumber,
+    startedAt: room.startedAt,
+  }).catch((e) => console.error("record", e));
 }
 
 // a friend can only be invited into a room its creator is still waiting in
@@ -163,7 +197,7 @@ wss.on("connection", (ws) => {
     if (m.t === "create") {
       const deck = deckOf(m.deck);
       if (!deck) return send(ws, { t: "error", message: "That deck can't be used" });
-      const r: Room = { code: newCode(), players: {}, state: null, v: 0, touched: Date.now() };
+      const r: Room = { code: newCode(), players: {}, state: null, v: 0, touched: Date.now(), games: 0, startedAt: 0, recorded: false, rematch: {}, lastChat: {} };
       r.players.south = { ...(await identify(m, "Player 1")), deck, token: randomBytes(12).toString("hex"), ws: null };
       rooms.set(r.code, r);
       sit(r, "south");
@@ -190,6 +224,19 @@ wss.on("connection", (ws) => {
       if (room && room.state) send(ws, { t: "state", v: room.v, state: room.state });
     } else if (m.t === "cmd") {
       if (room && seat) play(room, seat, m.cmd);
+    } else if (m.t === "chat") {
+      if (!room || !seat || typeof m.text !== "string") return;
+      const now = Date.now();
+      if (now - (room.lastChat[seat] ?? 0) < 1000) return;
+      room.lastChat[seat] = now;
+      tell(room, { t: "chat", from: seat, text: m.text.slice(0, 300), at: now });
+    } else if (m.t === "emote") {
+      if (room && seat && EMOTES.has(String(m.id))) tell(room, { t: "emote", from: seat, id: m.id });
+    } else if (m.t === "rematch") {
+      if (!room || !seat || room.state?.status !== "finished") return;
+      room.rematch[seat] = true;
+      tell(room, { t: "rematch", seat });
+      if (room.rematch.south && room.rematch.north) startMatch(room);
     }
   });
 

@@ -2,11 +2,27 @@ import { useEffect, useRef, useState } from "react";
 import type { MatchSeat } from "@tcg/op-engine";
 import { playerConfig, type DeckId, type Table } from "./match";
 import { forgetRoom, openRoom, savedRoom, serverUrl, type Ask } from "./net";
+import { api, type Friend } from "./online/social";
 
 type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "waiting"; code: string } | { kind: "error"; text: string };
 
 // make a room and read its code to a friend, or type theirs in
-export function Lobby({ deck, username, onStart, onBack }: { deck: DeckId; username?: string | null; onStart: (table: Table, seat: MatchSeat) => void; onBack: () => void }) {
+export function Lobby({
+  deck,
+  username,
+  join,
+  inviteTo,
+  onStart,
+  onBack,
+}: {
+  deck: DeckId;
+  username?: string | null;
+  // walk straight into this room, or make one and send this friend the code
+  join?: string | null;
+  inviteTo?: Friend | null;
+  onStart: (table: Table, seat: MatchSeat) => void;
+  onBack: () => void;
+}) {
   const [name, setName] = useState(() => localStorage.getItem("opsim.name") ?? "");
   const [code, setCode] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
@@ -16,6 +32,10 @@ export function Lobby({ deck, username, onStart, onBack }: { deck: DeckId; usern
   const saved = savedRoom();
 
   useEffect(() => () => pending.current?.close(), []);
+  useEffect(() => {
+    if (join) go({ join });
+    else if (inviteTo) go({ create: true });
+  }, []);
 
   const go = (ask: Ask) => {
     localStorage.setItem("opsim.name", name);
@@ -27,6 +47,7 @@ export function Lobby({ deck, username, onStart, onBack }: { deck: DeckId; usern
       room: (r) => {
         seat = r.seat;
         setStatus({ kind: "waiting", code: r.code });
+        if (inviteTo && "create" in ask) api("/invite", { to: inviteTo.uid, code: r.code }).then((x) => !x.ok && setStatus({ kind: "error", text: x.error }));
       },
       start: (table) => {
         pending.current = null;
@@ -51,7 +72,7 @@ export function Lobby({ deck, username, onStart, onBack }: { deck: DeckId; usern
       <h1>Play online</h1>
       {status.kind === "waiting" ? (
         <>
-          <p className="hint">Tell your friend the room code</p>
+          <p className="hint">{inviteTo ? `${inviteTo.name} has been invited` : "Tell your friend the room code"}</p>
           <div className="code">{status.code}</div>
           <p className="hint">Waiting for them to join…</p>
           <button className="ghost" onClick={stop}>Cancel</button>

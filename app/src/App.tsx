@@ -27,8 +27,12 @@ import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from ".
 import { appReady, applyUpdate, bundleVersion, checkForUpdate, installApk, type Check } from "./update";
 import { startPresence, useUser } from "./online/auth";
 import { Account, UsernameSheet } from "./online/Gate";
+import { configured } from "./online/firebase";
 import { Friends } from "./online/Friends";
-import { useInbox, useRequests } from "./online/social";
+import { Chat } from "./online/Chat";
+import { GlobalDecks } from "./online/GlobalDecks";
+import { useInbox, useRequests, useUnread, type Friend } from "./online/social";
+import { MatchChat } from "./MatchChat";
 import { onForeground, registerPush, takeIntent } from "./online/push";
 
 // ?seed=123&mine=red-aggro&theirs=st01 skips the menu, handy for replaying a hand
@@ -48,7 +52,16 @@ export default function App() {
       ? { table: localTable(newMatch(mine, theirs, mode, Number(params.get("seed"))), mode, level), seat: "south" }
       : null,
   );
-  const [screen, setScreen] = useState<"menu" | "setup" | "decks" | "lobby" | "friends" | { view: Deck } | { edit: Deck }>("menu");
+  const [screen, setScreen] = useState<"menu" | "setup" | "decks" | "lobby" | "friends" | "library" | { view: Deck } | { edit: Deck } | { chat: Friend }>("menu");
+  // an invite in hand: the code to walk into, or the friend to make a room for
+  const [joinCode, setJoinCode] = useState<string | null>(null);
+  const [inviteTo, setInviteTo] = useState<Friend | null>(null);
+  const goOnline = (join: string | null, invite: Friend | null) => {
+    setMode("online");
+    setJoinCode(join);
+    setInviteTo(invite);
+    setScreen("setup");
+  };
   const [saved, setSaved] = useState(loadDecks);
   const { user, named } = useUser();
   useEffect(() => (user?.uid ? startPresence(user.uid) : undefined), [user?.uid]);
@@ -57,15 +70,18 @@ export default function App() {
   }, [user?.uid, user?.username]);
   const inbox = useInbox(user?.uid ?? null);
   const requests = useRequests(user?.uid ?? null);
-  const badge = inbox.items.length + requests.length;
+  const unread = useUnread(user?.uid ?? null);
+  const badge = inbox.items.length + requests.length + unread;
   const [toast, setToast] = useState<string | null>(null);
   useEffect(() => {
     onForeground((i) => {
       setToast(`${i.title} · ${i.body}`);
       setTimeout(() => setToast(null), 3500);
     });
-    // a tapped notification lands on the friends screen, where the nudge or invite waits
-    if (takeIntent()) setScreen("friends");
+    // a tapped invite walks straight into the room; anything else lands on the friends screen
+    const i = takeIntent();
+    if (i?.kind === "invite" && i.code) goOnline(i.code, null);
+    else if (i) setScreen("friends");
   }, []);
   const [check, setCheck] = useState<Check | "checking" | null>(null);
   const [pct, setPct] = useState<number | null>(null);
@@ -107,10 +123,33 @@ export default function App() {
   }, [screen, match]);
 
   if (!match && screen === "lobby") {
-    return <Lobby deck={mine} username={user?.username} onBack={() => setScreen("setup")} onStart={(table, seat) => { setScreen("menu"); setMatch({ table, seat }); }} />;
+    return (
+      <Lobby
+        deck={mine}
+        username={user?.username}
+        join={joinCode}
+        inviteTo={inviteTo}
+        onBack={() => { setJoinCode(null); setInviteTo(null); setScreen("setup"); }}
+        onStart={(table, seat) => { setJoinCode(null); setInviteTo(null); setScreen("menu"); setMatch({ table, seat }); }}
+      />
+    );
   }
   if (!match && screen === "friends" && user) {
-    return <Friends user={user} onBack={() => setScreen("menu")} />;
+    return (
+      <Friends
+        user={user}
+        onBack={() => setScreen("menu")}
+        onChat={(f) => setScreen({ chat: f })}
+        onInvite={(f) => goOnline(null, f)}
+        onJoin={(code) => goOnline(code, null)}
+      />
+    );
+  }
+  if (!match && typeof screen === "object" && "chat" in screen && user) {
+    return <Chat me={user} friend={screen.chat} onBack={() => setScreen("friends")} />;
+  }
+  if (!match && screen === "library") {
+    return <GlobalDecks user={user ?? null} onBack={() => setScreen("menu")} onCopied={() => setSaved(loadDecks())} />;
   }
   if (!match && screen === "decks") {
     return (
@@ -127,6 +166,7 @@ export default function App() {
     return (
       <DeckView
         deck={screen.view}
+        me={user?.username ? { uid: user.uid, name: user.username } : null}
         onBack={() => setScreen("decks")}
         onEdit={() => setScreen({ edit: screen.view })}
         onDelete={() => { deleteDeck(screen.view.id); setSaved(loadDecks()); setScreen("decks"); }}
@@ -167,7 +207,7 @@ export default function App() {
             </label>
           )}
           {mode === "online" ? (
-            <button onClick={() => setScreen("lobby")}>Find a game</button>
+            <button onClick={() => setScreen("lobby")}>{joinCode ? `Join room ${joinCode}` : inviteTo ? `Invite ${inviteTo.name}` : "Find a game"}</button>
           ) : (
             <button onClick={() => setMatch({ table: localTable(newMatch(mine, theirs, mode), mode, level), seat: "south" })}>Play</button>
           )}
@@ -188,6 +228,7 @@ export default function App() {
         <button onClick={() => pick("self")}>Solo, both sides</button>
         <button onClick={() => pick("online")}>Online with a friend</button>
         <button className="ghost" onClick={() => setScreen("decks")}>Decks</button>
+        {configured && <button className="ghost" onClick={() => setScreen("library")}>Global Decks</button>}
         {release && (
           <div className="update">
             <span>
@@ -291,7 +332,7 @@ function Game({
   onQuit: () => void;
   onBack: MutableRefObject<() => boolean>;
 }) {
-  const { state: real, send, error, undo, link } = useMatch(table);
+  const { state: real, send, error, undo, link, chat, messages, emote, rematchFrom } = useMatch(table);
   // playing both sides, the table turns to face whoever is up, behind a "pass the phone" screen
   const seat = mode === "self" ? seatToShow(real) : mySeat;
   sitAt(seat);
@@ -821,7 +862,8 @@ function Game({
           <p>Pass the phone, then tap</p>
         </div>
       )}
-      {state.status === "finished" && <GameOver state={state} onQuit={onQuit} />}
+      {chat && <MatchChat chat={chat} me={ME} oppName={opp.playerName} messages={messages} emote={emote} />}
+      {state.status === "finished" && <GameOver state={state} oppName={opp.playerName} onQuit={onQuit} onRematch={chat?.rematch} rematchFrom={rematchFrom} />}
       {error && <div className="toast">{error}</div>}
       {link && (link.me !== "online" || !link.peer) && (
         <div className="toast link">{link.me !== "online" ? "Reconnecting…" : "Your opponent dropped off, waiting for them…"}</div>

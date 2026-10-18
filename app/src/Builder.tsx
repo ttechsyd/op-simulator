@@ -3,6 +3,7 @@ import type { OPCard } from "@tcg/op-types";
 import { getCard } from "@tcg/op-cards";
 import { cardImage } from "./cards";
 import { allArtUrls, cachedArtCount, colorsOf, deckToText, retryArt, newDeck, parseDeckText, deckProblems, deckSize, downloadArt, leaders, mainCards, prefetchImages, saveDeck, type Deck } from "./decks";
+import { shareDeck } from "./online/library";
 
 const COLORS = ["red", "green", "blue", "purple", "black", "yellow"] as const;
 const TYPES = ["character", "event", "stage"] as const;
@@ -251,9 +252,23 @@ function ArtDownload() {
 }
 
 // one deck on its own: read it, then Edit, Delete or Export
-export function DeckView({ deck, onEdit, onDelete, onBack }: { deck: Deck; onEdit: () => void; onDelete: () => void; onBack: () => void }) {
+export function DeckView({
+  deck,
+  me,
+  onEdit,
+  onDelete,
+  onBack,
+}: {
+  deck: Deck;
+  // a signed-in player can put a legal deck in the global library
+  me?: { uid: string; name: string } | null;
+  onEdit: () => void;
+  onDelete: () => void;
+  onBack: () => void;
+}) {
   const [zoom, setZoom] = useState<OPCard | null>(null);
   const [text, setText] = useState(false);
+  const [shared, setShared] = useState<"no" | "busy" | "yes">("no");
   const leader = deck.leader ? getCard(deck.leader) : null;
   const problems = deckProblems(deck);
   const rows = Object.entries(deck.cards).map(([id, n]) => ({ card: getCard(id), n }));
@@ -266,6 +281,11 @@ export function DeckView({ deck, onEdit, onDelete, onBack }: { deck: Deck; onEdi
         <span className={`b-count ${deckSize(deck) === 50 ? "ok" : ""}`}>{deckSize(deck)}/50</span>
         <span className="b-problems">{problems[0] ?? "Deck is legal"}</span>
         <button className="ghost small" onClick={() => setText(true)}>Export</button>
+        {me && problems.length === 0 && (
+          <button className="ghost small" disabled={shared !== "no"} onClick={() => { setShared("busy"); shareDeck(me, deck).then(() => setShared("yes"), () => setShared("no")); }}>
+            {shared === "yes" ? "Shared" : shared === "busy" ? "Sharing…" : "Share"}
+          </button>
+        )}
         <button className="ghost small" onClick={() => { if (confirm(`Delete ${deck.name}?`)) onDelete(); }}>Delete</button>
         <button className="end" onClick={onEdit}>Edit</button>
       </div>
