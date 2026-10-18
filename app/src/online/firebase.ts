@@ -6,13 +6,13 @@ import { getDatabase } from "firebase/database";
 // The web app's config from the Firebase console (Project settings → Your apps → Web).
 // These values are public by design; the security rules are what protect the data.
 export const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
-  databaseURL: "",
+  apiKey: "AIzaSyC3K0XN5Tj_VrVe6zz-PD7mMUCLfcKjtPQ",
+  authDomain: "op-sim-ba397.firebaseapp.com",
+  projectId: "op-sim-ba397",
+  storageBucket: "op-sim-ba397.firebasestorage.app",
+  messagingSenderId: "128535879171",
+  appId: "1:128535879171:web:2dbffddf76a4bcd999b836",
+  databaseURL: "https://op-sim-ba397-default-rtdb.asia-southeast1.firebasedatabase.app",
 };
 
 // until the config is filled in, the app runs offline-only and the sign-in row stays hidden

@@ -1,5 +1,5 @@
 app = "op-simulator"
-primary_region = "syd"
+primary_region = "sin"
 
 [http_service]
   internal_port = 8080
