@@ -30,7 +30,7 @@ export function History({ user, onBack }: { user: User; onBack: () => void }) {
           };
         }),
       ),
-    );
+    ).catch(() => setMatches([]));
   }, [user.uid]);
 
   return (
