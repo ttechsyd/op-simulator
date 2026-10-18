@@ -1,7 +1,8 @@
 name: server
 
 # Deploys the room server to Fly when it changes. Needs the FLY_API_TOKEN secret and
-# an app called op-simulator on the account (fly apps create op-simulator).
+# an app called op-simulator on the account (fly apps create op-simulator). Until that
+# secret exists the job skips: the server is hosted on the dev pc (see CLAUDE.md).
 on:
   workflow_dispatch:
   push:
@@ -11,15 +12,20 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - if: env.FLY_API_TOKEN == ''
+        run: echo "no FLY_API_TOKEN, nothing to deploy"
+      - if: env.FLY_API_TOKEN != ''
+        uses: actions/checkout@v4
         with:
           submodules: true
-      - run: bash scripts/patch-engine.sh
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl apps create op-simulator --org personal || true
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      - run: flyctl deploy --remote-only --config server/fly.toml --dockerfile server/Dockerfile .
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - if: env.FLY_API_TOKEN != ''
+        run: bash scripts/patch-engine.sh
+      - if: env.FLY_API_TOKEN != ''
+        uses: superfly/flyctl-actions/setup-flyctl@master
+      - if: env.FLY_API_TOKEN != ''
+        run: flyctl apps create op-simulator --org personal || true
+      - if: env.FLY_API_TOKEN != ''
+        run: flyctl deploy --remote-only --config server/fly.toml --dockerfile server/Dockerfile .
