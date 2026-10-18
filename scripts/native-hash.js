@@ -13,6 +13,9 @@ const files = execFileSync("git", ["ls-files", "android", "capacitor.config.ts"]
   .filter(Boolean)
   .sort()
   .map((f) => path.join(root, f));
+// never committed, but an apk built without it boots with the firebase plugins dead
+const gs = path.join(root, "android", "app", "google-services.json");
+if (fs.existsSync(gs)) files.push(gs);
 
 const h = crypto.createHash("sha256");
 for (const f of files) {

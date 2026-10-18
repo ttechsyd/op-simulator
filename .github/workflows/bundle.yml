@@ -76,6 +76,11 @@ jobs:
           cd app
           echo "cards=$(node --input-type=module -e "import { allCards } from '@tcg/op-cards'; console.log(allCards.length)")" >> "$GITHUB_OUTPUT"
 
+      - name: firebase config
+        run: '[ -n "$GS_B64" ] && echo "$GS_B64" | base64 -d > app/android/app/google-services.json || true'
+        env:
+          GS_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+
       - name: pack
         run: |
           (cd app && npx cap sync android)
@@ -104,7 +109,6 @@ jobs:
         run: |
           cd app
           echo "$KS_B64" | base64 -d > android/opsim.keystore
-          [ -n "$GS_B64" ] && echo "$GS_B64" | base64 -d > android/app/google-services.json
           printf 'storeFile=opsim.keystore\nstorePassword=%s\nkeyAlias=opsim\nkeyPassword=%s\n' "$KS_PW" "$KS_PW" > android/keystore.properties
           npx cap sync android
           cd android && chmod +x gradlew && ./gradlew assembleRelease -q
@@ -112,7 +116,6 @@ jobs:
         env:
           KS_B64: ${{ secrets.OPSIM_KEYSTORE_B64 }}
           KS_PW: ${{ secrets.OPSIM_KEYSTORE_PASSWORD }}
-          GS_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
           BUNDLE_VERSION: ${{ steps.v.outputs.version }}
           BUILD_NUMBER: ${{ github.run_number }}
 
