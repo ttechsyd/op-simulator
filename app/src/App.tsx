@@ -27,6 +27,9 @@ import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from ".
 import { appReady, applyUpdate, bundleVersion, checkForUpdate, installApk, type Check } from "./update";
 import { startPresence, useUser } from "./online/auth";
 import { Account, UsernameSheet } from "./online/Gate";
+import { Friends } from "./online/Friends";
+import { useInbox, useRequests } from "./online/social";
+import { onForeground, registerPush, takeIntent } from "./online/push";
 
 // ?seed=123&mine=red-aggro&theirs=st01 skips the menu, handy for replaying a hand
 const params = new URLSearchParams(location.search);
@@ -45,10 +48,25 @@ export default function App() {
       ? { table: localTable(newMatch(mine, theirs, mode, Number(params.get("seed"))), mode, level), seat: "south" }
       : null,
   );
-  const [screen, setScreen] = useState<"menu" | "setup" | "decks" | "lobby" | { view: Deck } | { edit: Deck }>("menu");
+  const [screen, setScreen] = useState<"menu" | "setup" | "decks" | "lobby" | "friends" | { view: Deck } | { edit: Deck }>("menu");
   const [saved, setSaved] = useState(loadDecks);
   const { user, named } = useUser();
   useEffect(() => (user?.uid ? startPresence(user.uid) : undefined), [user?.uid]);
+  useEffect(() => {
+    if (user?.username) registerPush(user.uid).catch(() => {});
+  }, [user?.uid, user?.username]);
+  const inbox = useInbox(user?.uid ?? null);
+  const requests = useRequests(user?.uid ?? null);
+  const badge = inbox.items.length + requests.length;
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    onForeground((i) => {
+      setToast(`${i.title} · ${i.body}`);
+      setTimeout(() => setToast(null), 3500);
+    });
+    // a tapped notification lands on the friends screen, where the nudge or invite waits
+    if (takeIntent()) setScreen("friends");
+  }, []);
   const [check, setCheck] = useState<Check | "checking" | null>(null);
   const [pct, setPct] = useState<number | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
@@ -76,9 +94,23 @@ export default function App() {
       sub.then((s) => s.remove());
     };
   }, []);
+  // every screen but the menu steps back a level; the running Game installs its own
+  useEffect(() => {
+    if (match || screen === "menu") return;
+    onBack.current = () => {
+      setScreen(screen === "lobby" ? "setup" : "menu");
+      return true;
+    };
+    return () => {
+      onBack.current = () => false;
+    };
+  }, [screen, match]);
 
   if (!match && screen === "lobby") {
     return <Lobby deck={mine} username={user?.username} onBack={() => setScreen("setup")} onStart={(table, seat) => { setScreen("menu"); setMatch({ table, seat }); }} />;
+  }
+  if (!match && screen === "friends" && user) {
+    return <Friends user={user} onBack={() => setScreen("menu")} />;
   }
   if (!match && screen === "decks") {
     return (
@@ -150,8 +182,7 @@ export default function App() {
     return (
       <div className="menu">
         <h1>OP Sim</h1>
-        {/* TODO phase b: the name button opens the friends screen */}
-        <Account user={user} badge={0} onFriends={() => {}} />
+        <Account user={user} badge={badge} onFriends={() => setScreen("friends")} />
         {user && !user.username && <UsernameSheet uid={user.uid} onDone={named} />}
         <button onClick={() => pick("bot")}>Player vs AI</button>
         <button onClick={() => pick("self")}>Solo, both sides</button>
@@ -214,6 +245,7 @@ export default function App() {
             </button>
           </div>
         )}
+        {toast && <div className="toast">{toast}</div>}
         <small className="ver">
           build {bundleVersion} ·{" "}
           {check === "checking" ? (

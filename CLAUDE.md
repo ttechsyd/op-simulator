@@ -50,6 +50,18 @@ still imports a sibling package as TypeScript. `.github/workflows/server.yml` de
 Fly as `op-simulator` on pushes to `server/`; it needs the `FLY_API_TOKEN` secret. Run it
 locally with `pnpm --dir server dev` and open the app with `?server=ws://localhost:8787`.
 
+## Online accounts
+
+Sign-in, friends, chat, presence and push live in Firebase (free Spark plan); the code is in
+`app/src/online/`. The web config goes in `app/src/online/firebase.ts`; until it is filled in
+the whole online side stays hidden and the app is offline-only. Rules and indexes are in
+`firebase/` (`npx firebase-tools deploy --only firestore,database`). The room server is the only
+thing with admin credentials: run it with `FIREBASE_SERVICE_ACCOUNT=.secrets/service-account.json`
+and `FIREBASE_DATABASE_URL=...` set, or without them for guest-only rooms. To test from a phone
+without Fly, `cloudflared tunnel --url http://localhost:8787` and paste the `wss://` address into
+the lobby's server field. `google-services.json` and `server/.secrets/` never go in git; CI gets the
+former from the `GOOGLE_SERVICES_JSON_B64` secret.
+
 ## Working from a fresh clone (cloud sessions too)
 
 `scripts/setup.sh` does everything: submodule, engine deps and build, app deps and build.

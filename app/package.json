@@ -14,6 +14,7 @@
     "@capacitor/android": "^7.0.0",
     "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.0.0",
+    "@capacitor/push-notifications": "7.0.7",
     "@capgo/capacitor-updater": "^8.53.0",
     "@tcg/op-cards": "link:../tcg-engines/submodules/one-piece/packages/cards",
     "@tcg/op-engine": "link:../tcg-engines/submodules/one-piece/packages/engine",

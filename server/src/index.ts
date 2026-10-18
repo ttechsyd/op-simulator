@@ -11,6 +11,8 @@ import {
   type MatchState,
 } from "@tcg/op-engine";
 import { hasCard } from "@tcg/op-cards";
+import { api } from "./api";
+import { profile, verify } from "./fire";
 
 // One room per match, kept in memory. The creator sits south, the joiner north. Each
 // player gets a token so a phone that drops its socket can pick the seat back up.
@@ -18,6 +20,8 @@ import { hasCard } from "@tcg/op-cards";
 interface Player {
   name: string;
   deck: MatchPlayerConfig;
+  // a signed-in player is known by uid; a guest only by the token handed out at the door
+  uid: string | null;
   token: string;
   ws: WebSocket | null;
 }
@@ -106,10 +110,32 @@ function play(room: Room, seat: MatchSeat, cmd: EngineCommand) {
   tell(room, { t: "patch", v: room.v, patches });
 }
 
+// a friend can only be invited into a room its creator is still waiting in
+const invitable = (code: string, uid: string) => {
+  const r = rooms.get(code);
+  return !!r && r.players.south?.uid === uid && !r.players.north;
+};
+
 const http = createServer((req, res) => {
-  res.writeHead(200, { "content-type": "text/plain" });
-  res.end(`ok, ${rooms.size} rooms`);
+  api(req, res, { invitable })
+    .then((handled) => {
+      if (handled) return;
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end(`ok, ${rooms.size} rooms`);
+    })
+    .catch((e) => {
+      console.error(e);
+      res.writeHead(500);
+      res.end();
+    });
 });
+
+// who is at the door: a verified account, or whatever name they typed
+async function identify(m: { auth?: unknown; name?: unknown }, fallback: string) {
+  const uid = typeof m.auth === "string" ? await verify(m.auth) : null;
+  const username = uid ? (await profile(uid)).username : null;
+  return { uid, name: (username ?? String(m.name || fallback)).slice(0, 20) };
+}
 const wss = new WebSocketServer({ server: http });
 
 wss.on("connection", (ws) => {
@@ -123,11 +149,11 @@ wss.on("connection", (ws) => {
     p.ws?.close();
     p.ws = ws;
     r.touched = Date.now();
-    send(ws, { t: "room", code: r.code, seat: s, token: p.token, peer: !!r.players[other(s)]?.ws });
+    send(ws, { t: "room", code: r.code, seat: s, token: p.uid ? undefined : p.token, uid: p.uid ?? undefined, peer: !!r.players[other(s)]?.ws });
     send(r.players[other(s)]?.ws ?? null, { t: "peer", online: true });
   };
 
-  ws.on("message", (raw) => {
+  ws.on("message", async (raw) => {
     let m: any;
     try {
       m = JSON.parse(String(raw));
@@ -138,7 +164,7 @@ wss.on("connection", (ws) => {
       const deck = deckOf(m.deck);
       if (!deck) return send(ws, { t: "error", message: "That deck can't be used" });
       const r: Room = { code: newCode(), players: {}, state: null, v: 0, touched: Date.now() };
-      r.players.south = { name: String(m.name || "Player 1").slice(0, 20), deck, token: randomBytes(12).toString("hex"), ws: null };
+      r.players.south = { ...(await identify(m, "Player 1")), deck, token: randomBytes(12).toString("hex"), ws: null };
       rooms.set(r.code, r);
       sit(r, "south");
     } else if (m.t === "join") {
@@ -147,12 +173,16 @@ wss.on("connection", (ws) => {
       if (r.players.north) return send(ws, { t: "error", message: "That room is full" });
       const deck = deckOf(m.deck);
       if (!deck) return send(ws, { t: "error", message: "That deck can't be used" });
-      r.players.north = { name: String(m.name || "Player 2").slice(0, 20), deck, token: randomBytes(12).toString("hex"), ws: null };
+      r.players.north = { ...(await identify(m, "Player 2")), deck, token: randomBytes(12).toString("hex"), ws: null };
       sit(r, "north");
       startMatch(r);
     } else if (m.t === "resume") {
       const r = rooms.get(String(m.code ?? ""));
-      const s = (["south", "north"] as const).find((x) => r?.players[x]?.token === m.token);
+      const uid = typeof m.auth === "string" ? await verify(m.auth) : null;
+      const s = (["south", "north"] as const).find((x) => {
+        const p = r?.players[x];
+        return !!p && ((uid && p.uid === uid) || (m.token && p.token === m.token));
+      });
       if (!r || !s) return send(ws, { t: "error", message: "That room is gone" });
       sit(r, s);
       if (r.state) send(ws, { t: "state", v: r.v, state: r.state });

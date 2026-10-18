@@ -11,9 +11,11 @@ RUN cd tcg-engines/submodules/agnostic-simulator \
 RUN cd tcg-engines/submodules/one-piece && CI=true pnpm install --frozen-lockfile && pnpm exec turbo run build
 RUN cd server && pnpm install --frozen-lockfile && pnpm build
 
-# the bundle carries the engine, the cards and ws, so nothing else is needed at runtime
+# the bundle carries the engine, the cards and ws; firebase-admin is the one module it
+# loads from disk, so it is installed on its own here
 FROM node:22-bookworm-slim
 WORKDIR /app
+RUN npm init -y >/dev/null && npm install --omit=dev firebase-admin@13 >/dev/null
 COPY --from=build /src/server/dist/server.mjs .
 ENV PORT=8080
 EXPOSE 8080

@@ -12,6 +12,7 @@
     "@tcg/op-cards": "link:../tcg-engines/submodules/one-piece/packages/cards",
     "@tcg/op-engine": "link:../tcg-engines/submodules/one-piece/packages/engine",
     "@tcg/op-types": "link:../tcg-engines/submodules/one-piece/packages/types",
+    "firebase-admin": "^13.10.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
