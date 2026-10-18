@@ -224,88 +224,113 @@ export default function App() {
       setScreen("setup");
     };
     return (
-      <div className="menu">
-        <h1>OP Sim</h1>
-        <Account user={user} badge={badge} onFriends={() => setScreen("friends")} />
-        {user && !user.username && <UsernameSheet uid={user.uid} onDone={named} />}
-        <button onClick={() => pick("bot")}>Player vs AI</button>
-        <button onClick={() => pick("self")}>Solo, both sides</button>
-        <button onClick={() => pick("online")}>Online with a friend</button>
-        <button className="ghost" onClick={() => setScreen("decks")}>Decks</button>
-        {configured && <button className="ghost" onClick={() => setScreen("library")}>Global Decks</button>}
-        {user?.username && <button className="ghost" onClick={() => setScreen("history")}>History</button>}
-        {release && (
-          <div className="update">
-            <span>
-              Card update {release.version}
-              <small>{updateError ? `Failed: ${updateError}` : `${release.cards} cards · engine ${release.engine}`}</small>
-            </span>
-            {pct === null ? (
+      <div className="home">
+        <div className="home-side">
+          <h1>OP Sim</h1>
+          <Account user={user} badge={badge} onFriends={() => setScreen("friends")} />
+          {user && !user.username && <UsernameSheet uid={user.uid} onDone={named} />}
+          {release && (
+            <div className="update">
+              <span>
+                Card update {release.version}
+                <small>{updateError ? `Failed: ${updateError}` : `${release.cards} cards · engine ${release.engine}`}</small>
+              </span>
+              {pct === null ? (
+                <button
+                  className="small"
+                  onClick={() => {
+                    setPct(0);
+                    setUpdateError(null);
+                    applyUpdate(release, setPct).catch((e: Error) => {
+                      setPct(null);
+                      setUpdateError(e.message || "download failed");
+                    });
+                  }}
+                >
+                  Update
+                </button>
+              ) : (
+                <span className="pct">{pct}%</span>
+              )}
+            </div>
+          )}
+          {apkRelease && (
+            <div className="update">
+              <span>
+                App update {apkRelease.version}
+                <small>
+                  {updateError
+                    ? `Failed: ${updateError}`
+                    : apkState === "downloading"
+                      ? "downloading, watch the notification"
+                      : apkState === "installer"
+                        ? "confirm the install when Android asks"
+                        : "new native build · installs over this one"}
+                </small>
+              </span>
               <button
                 className="small"
+                disabled={apkState === "downloading"}
                 onClick={() => {
-                  setPct(0);
+                  setApkState("downloading");
                   setUpdateError(null);
-                  applyUpdate(release, setPct).catch((e: Error) => {
-                    setPct(null);
-                    setUpdateError(e.message || "download failed");
-                  });
+                  installApk(apkRelease)
+                    .then(() => setApkState("installer"))
+                    .catch((e: Error) => {
+                      setApkState("idle");
+                      setUpdateError(e.message || "download failed");
+                    });
                 }}
               >
-                Update
+                {apkState === "installer" ? "Install again" : "Install update"}
               </button>
+            </div>
+          )}
+          <small className="ver">
+            build {bundleVersion} ·{" "}
+            {check === "checking" ? (
+              "checking…"
+            ) : check?.status === "current" ? (
+              <>up to date · <button className="link" onClick={lookForUpdate}>check again</button></>
+            ) : check?.status === "unreachable" ? (
+              <>couldn't reach GitHub · <button className="link" onClick={lookForUpdate}>retry</button></>
+            ) : check?.status === "browser" ? (
+              "updates only on the phone"
             ) : (
-              <span className="pct">{pct}%</span>
+              <button className="link" onClick={lookForUpdate}>check for updates</button>
             )}
-          </div>
-        )}
-        {apkRelease && (
-          <div className="update">
-            <span>
-              App update {apkRelease.version}
-              <small>
-                {updateError
-                  ? `Failed: ${updateError}`
-                  : apkState === "downloading"
-                    ? "downloading, watch the notification"
-                    : apkState === "installer"
-                      ? "confirm the install when Android asks"
-                      : "new native build · installs over this one"}
-              </small>
-            </span>
-            <button
-              className="small"
-              disabled={apkState === "downloading"}
-              onClick={() => {
-                setApkState("downloading");
-                setUpdateError(null);
-                installApk(apkRelease)
-                  .then(() => setApkState("installer"))
-                  .catch((e: Error) => {
-                    setApkState("idle");
-                    setUpdateError(e.message || "download failed");
-                  });
-              }}
-            >
-              {apkState === "installer" ? "Install again" : "Install update"}
+          </small>
+        </div>
+        <div className="home-main">
+          <div className="tiles">
+            <button className="tile" onClick={() => pick("bot")}>
+              <i>⚔</i>
+              Player vs AI
+              <small>Normal or Hard bot</small>
+            </button>
+            <button className="tile" onClick={() => pick("self")}>
+              <i>⇄</i>
+              Solo, both sides
+              <small>One phone, both seats</small>
+            </button>
+            <button className="tile" onClick={() => pick("online")}>
+              <i>◎</i>
+              Online
+              <small>Room code or invite</small>
             </button>
           </div>
-        )}
+          <div className="shelf">
+            <button onClick={() => setScreen("decks")}>Decks</button>
+            {configured && <button onClick={() => setScreen("library")}>Global Decks</button>}
+            {user?.username && (
+              <button onClick={() => setScreen("friends")}>
+                Friends {badge > 0 && <span className="badge">{badge}</span>}
+              </button>
+            )}
+            {user?.username && <button onClick={() => setScreen("history")}>History</button>}
+          </div>
+        </div>
         {toast && <div className="toast">{toast}</div>}
-        <small className="ver">
-          build {bundleVersion} ·{" "}
-          {check === "checking" ? (
-            "checking…"
-          ) : check?.status === "current" ? (
-            <>up to date · <button className="link" onClick={lookForUpdate}>check again</button></>
-          ) : check?.status === "unreachable" ? (
-            <>couldn't reach GitHub · <button className="link" onClick={lookForUpdate}>retry</button></>
-          ) : check?.status === "browser" ? (
-            "updates only on the phone"
-          ) : (
-            <button className="link" onClick={lookForUpdate}>check for updates</button>
-          )}
-        </small>
       </div>
     );
   }
