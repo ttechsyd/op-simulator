@@ -4,32 +4,70 @@
       "collectionGroup": "friendRequests",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "to", "order": "ASCENDING" },
-        { "fieldPath": "at", "order": "DESCENDING" }
+        {
+          "fieldPath": "to",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "decks",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "leader", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "leader",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "decks",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "leader", "order": "ASCENDING" },
-        { "fieldPath": "nameLower", "order": "ASCENDING" }
+        {
+          "fieldPath": "leader",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nameLower",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "matches",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "uids", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "finishedAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "uids",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "finishedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "inbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "seen",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
       ]
     }
   ],
