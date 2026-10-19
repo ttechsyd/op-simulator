@@ -40,7 +40,6 @@ export function Preview({
   const cards = group.filter((c) => !c.hidden && c.cardId);
   const [picking, setPicking] = useState<{ id: string; a: PotentialCardCommandDescriptor } | null>(null);
   const strip = useRef<HTMLDivElement>(null);
-  // the tap that opened this fires its click a moment later, on the backdrop
   const born = useRef(Date.now());
 
   useEffect(() => {
@@ -81,7 +80,13 @@ export function Preview({
   };
 
   return (
-    <div className="preview" onClick={() => Date.now() - born.current > 350 && onClose()}>
+    <div
+      className="preview"
+      // the tap that opened this lands its click here a moment later; on a phone the card's
+      // own Play button can be right under the finger, so swallow it before anything sees it
+      onClickCapture={(e) => Date.now() - born.current < 350 && e.stopPropagation()}
+      onClick={onClose}
+    >
       <div
         className="strip"
         ref={strip}
