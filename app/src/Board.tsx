@@ -101,7 +101,7 @@ function Don({ rested, press }: { rested?: boolean; press?: (e: ReactPointerEven
 }
 
 // life[0] is the top of the stack; a card turned face up by an effect stays visible
-function Life({ cards, press, dealt }: { cards: ProjectedCard[]; press?: Press; dealt: boolean }) {
+function Life({ cards, press, dealt, opponent }: { cards: ProjectedCard[]; press?: Press; dealt: boolean; opponent?: boolean }) {
   const up = cards.filter((c) => !c.hidden);
   return (
     <div className="life">
@@ -122,7 +122,7 @@ function Life({ cards, press, dealt }: { cards: ProjectedCard[]; press?: Press; 
           ),
         )}
       </div>
-      <span className="zlabel">{!dealt ? "Life" : cards.length ? `Life ${cards.length}` : <>No life<br />next hit wins</>}</span>
+      <span className="zlabel">{!dealt ? "Life" : cards.length ? `Life ${cards.length}` : <>0 Life<br />next hit {opponent ? "wins" : "loses"}</>}</span>
     </div>
   );
 }
@@ -218,7 +218,7 @@ export function Seat({
   return (
     <div className={`mat ${opponent ? "opp" : "me"}`} data-drop={opponent ? undefined : "side"}>
       <div className={`z-life ${opponent ? "" : dropClass("life", drop)}`} data-drop={opponent ? undefined : "life"}>
-        <Life cards={p.life} press={press} dealt={dealt} />
+        <Life cards={p.life} press={press} dealt={dealt} opponent={opponent} />
       </div>
 
       <div className="z-chars">
@@ -278,7 +278,7 @@ export function Seat({
       <div className="z-cost">
         {Array.from({ length: p.activeDon }, (_, i) => <Don key={`a${i}`} press={pressDon} />)}
         {Array.from({ length: p.restedDon }, (_, i) => <Don key={`r${i}`} rested press={pressRestedDon} />)}
-        <span className="zlabel">{opponent ? "Cost area" : `Cost area · ${p.activeDon} active`}</span>
+        <span className="zlabel">{p.activeDon + p.restedDon ? `DON!! ${p.activeDon}/${p.activeDon + p.restedDon} active` : "Cost area"}</span>
       </div>
 
       <div className="z-corner">{corner}</div>
@@ -294,7 +294,6 @@ export function Hand({
   litIds,
   onIds,
   dim,
-  marks,
   pos,
   onLift,
 }: {
@@ -304,7 +303,6 @@ export function Hand({
   onIds?: Set<string>;
   // a counter or blocker step greys out the cards that can't answer it
   dim?: boolean;
-  marks?: Map<string, string[]>;
   pos: "" | "up" | "half" | "tuck";
   onLift: (up: boolean | "toggle") => void;
 }) {
@@ -378,7 +376,6 @@ export function Hand({
             lit={lit}
             on={!!c.instanceId && !!onIds?.has(c.instanceId)}
             dim={dim && !lit}
-            marks={c.instanceId ? marks?.get(c.instanceId) : undefined}
             style={{
               marginLeft: i ? step - 80 : 0,
               transform: up ? "translateY(-14px)" : `rotate(${off * 3}deg) translateY(${Math.abs(off) * 3}px)`,

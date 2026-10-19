@@ -55,3 +55,24 @@ const TIMINGS: Record<string, string> = {
 export function timingName(trigger: string): string {
   return TIMINGS[trigger] ?? trigger.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
 }
+
+const CLAUSE = /\[(On Play|When Attacking|On Block|On K\.O\.|Activate: Main|Main|Counter|End of Your Turn|End of Your Opponent's Turn|On Your Opponent's Attack|Trigger)\]/g;
+
+// the printed text of one timing on a card, so a prompt can say what it would do
+export function effectFor(cardId: string, trigger: string): string {
+  const c = getCard(cardId);
+  if (trigger === "trigger") return "trigger" in c && typeof c.trigger === "string" ? c.trigger : "";
+  const text = (c.effect ?? "").replace(/\s*This card has been officially errata'd\.?/, "");
+  const at = text.indexOf(`[${timingName(trigger)}]`);
+  if (at < 0) return "";
+  let from = at + timingName(trigger).length + 2;
+  // "[On Play]/[When Attacking] ..." shares one clause
+  while (/^\/\[[^\]]+\]/.test(text.slice(from))) from = text.indexOf("]", from) + 1;
+  CLAUSE.lastIndex = from;
+  const next = CLAUSE.exec(text);
+  let end = next ? next.index : text.length;
+  // a "[DON!! x1]" condition in front of the next clause belongs to it
+  const cond = text.slice(from, end).search(/\[DON!! x\d+\]\s*$/);
+  if (cond >= 0) end = from + cond;
+  return text.slice(from, end).replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
+}

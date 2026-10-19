@@ -12,7 +12,7 @@ import { Hand, OppHand, Phases, Seat } from "./Board";
 import { GameOver, PromptSheet, SetupSheet } from "./Overlays";
 import { Preview } from "./Preview";
 import { Tray, pickTargets, shownCard, trayMode } from "./Tray";
-import { Log, battleNumbers, filler, logDetail, wording } from "./Log";
+import { Log, battleNumbers, filler, logDetail, noise, whose, wording } from "./Log";
 import { BattleArrow, useCardMotion } from "./anim";
 import { useManualTurnStart } from "./turnStart";
 import { DragLayer, settleLayout, useDrag, type DragSource, type Layout } from "./drag";
@@ -21,7 +21,7 @@ import type { Level } from "./bot";
 import { quietEndEffects, wastedUse } from "./skips";
 import { Lobby } from "./Lobby";
 import { forgetRoom } from "./net";
-import { cardCounter, cardImage, cardName, skillWantsDon, timingName } from "./cards";
+import { cardCounter, cardImage, cardName, effectFor, skillWantsDon, timingName } from "./cards";
 import { Builder, DeckList, DeckView } from "./Builder";
 import { deleteDeck, loadDecks, newDeck, purgeUnverifiedArt, type Deck } from "./decks";
 import { appReady, applyUpdate, bundleVersion, checkForUpdate, installApk, type Check } from "./update";
@@ -519,20 +519,18 @@ function Game({
     for (const a of potential) if (a.enabled && a.sourceId) s.add(a.sourceId);
     return s;
   }, [potential]);
-  // every card wears what it can do right now, so nothing has to be tapped to find out
+  // board cards wear what they can do right now; the hand just lights up
   const marks = useMemo(() => {
     const m = new Map<string, string[]>();
     const add = (id: string, mark: string) => m.set(id, [...(m.get(id) ?? []), mark]);
     for (const a of potential) {
       if (!a.enabled || !a.sourceId) continue;
-      if (a.type === "playCard") add(a.sourceId, "PLAY");
-      else if (a.type === "declareAttack" && a.targetIds?.length) add(a.sourceId, "ATK");
+      if (a.type === "declareAttack" && a.targetIds?.length) add(a.sourceId, "ATK");
       else if (a.type === "activateEffect") add(a.sourceId, "SKILL");
     }
     if (battleStep === "block") for (const id of stepIds) add(id, "BLOCK");
-    if (battleStep === "counter") for (const id of stepIds) add(id, `+${cardCounter(state.cards[id].cardId) ?? 0}`);
     return m;
-  }, [potential, battleStep, stepIds, state]);
+  }, [potential, battleStep, stepIds]);
 
   const battle = state.battle;
   // the engine only folds counters into defensePower when it compares, so add them while the step runs
@@ -622,7 +620,7 @@ function Game({
   const opp = view.players[BOT];
   // the corner strip: the last few real moves, newest first, with the numbers that matter
   const battles = useMemo(() => battleNumbers(state), [state.eventHistory]);
-  const logs = view.logs.filter((l) => !filler(l.message)).slice(-3).reverse();
+  const logs = view.logs.filter((l) => !filler(l.message) && !noise(l.message)).slice(-2).reverse();
 
   // the whole table is drawn at 960x430 and scaled to whatever screen it lands on
   const tableRef = useRef<HTMLDivElement>(null);
@@ -683,7 +681,7 @@ function Game({
                   const extra = logDetail(l, state, battles);
                   return (
                     <span key={l.id}>
-                      {wording(l.message)}
+                      {wording(l.message, whose(l, opp.playerName))}
                       {extra && <small> {extra}</small>}
                     </span>
                   );
@@ -736,7 +734,6 @@ function Game({
           litIds={battleStep ? stepIds : tray === "pick" ? pickIds : canAct}
           onIds={new Set(picked)}
           dim={!!battleStep}
-          marks={marks}
           pos={handPos}
           onLift={(v) => setHandUp((cur) => (v === "toggle" ? !cur : v))}
         />
@@ -747,11 +744,14 @@ function Game({
           {thumb(shownCard(trigger, state))}
           <span>
             {cardName(state.cards[shownCard(trigger, state)].cardId)}
-            <small> {trigger.resolutionContext?.intent === "lifeTrigger" ? "[Trigger]" : trigger.details}</small>
+            <small> {trigger.resolutionContext?.intent === "lifeTrigger" ? "[Trigger]" : wording(trigger.details ?? "")}</small>
+            {trigger.resolutionContext?.intent === "lifeTrigger" && (
+              <small className="fx">{effectFor(state.cards[shownCard(trigger, state)].cardId, "trigger")}</small>
+            )}
           </span>
           {trigger.options.map((o) => (
             <button key={o.id} className={o.id === "skip" ? "ghost" : ""} onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: trigger.id, optionId: o.id })}>
-              {o.id === "skip" ? "Skip" : o.id === "activate" ? "Use" : o.label}
+              {o.id === "skip" ? (trigger.resolutionContext?.intent === "lifeTrigger" ? "Add to hand" : "Skip") : o.id === "activate" ? "Activate" : o.label}
             </button>
           ))}
         </div>
@@ -762,12 +762,12 @@ function Game({
             <small>
               {" "}
               {myPrompt.resolutionContext?.intent === "playCharacterReplacement"
-                ? "board full · trash 1"
+                ? "board full: trash a Character to make room"
                 : givingDon
                   ? "drag a rested DON!! over, or tap the card"
                   : myPrompt.resolutionContext?.intent === "readyEffectOrder"
-                    ? "which effect first? tap its card"
-                  : (myPrompt.details || myPrompt.label).replace(/\.$/, "")}
+                    ? "which resolves first? Tap its card"
+                  : wording(myPrompt.details || myPrompt.label).replace(/\.$/, "")}
             </small>
           </span>
           {myPrompt.maxSelections > 1 && <span className="hint">{picked.length}/{myPrompt.maxSelections}</span>}
@@ -779,7 +779,9 @@ function Game({
               disabled={picked.length < myPrompt.minSelections}
               onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: picked })}
             >
-              {picked.length === 0 ? (myPrompt.minSelections === 0 ? "None" : `Pick ${myPrompt.minSelections}`) : `Confirm ${picked.length}`}
+              {picked.length === 0
+                ? myPrompt.minSelections === 0 ? "Choose none" : `Pick ${myPrompt.minSelections}`
+                : myPrompt.maxSelections > 1 ? `Confirm ${picked.length}/${myPrompt.maxSelections}` : "Confirm"}
             </button>
           )}
         </div>
@@ -791,11 +793,14 @@ function Game({
             <small>
               {" "}
               {quick.resolutionContext?.intent === "effectOptional"
-                ? `use [${timingName(String(quick.context.trigger))}]?${wasted ? " no target, it would do nothing" : ""}`
+                ? `[${timingName(String(quick.context.trigger))}]${wasted ? " · no target, it would do nothing" : ""}`
                 : givingCount
-                  ? "how many DON!!? or drag a rested one over"
-                  : quick.details || quick.label}
+                  ? "how many DON!!? Or drag a rested one over"
+                  : wording(quick.details || quick.label)}
             </small>
+            {quick.resolutionContext?.intent === "effectOptional" && quick.sourceInstanceId && (
+              <small className="fx">{effectFor(state.cards[quick.sourceInstanceId].cardId, String(quick.context.trigger))}</small>
+            )}
           </span>
           {quick.resolutionContext?.intent === "loopIterations" ? (
             <>
@@ -810,7 +815,7 @@ function Game({
                 disabled={o.enabled === false || (wasted && o.id === "yes")}
                 onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: quick.id, optionId: o.id })}
               >
-                {o.label}
+                {quick.resolutionContext?.intent === "effectOptional" ? (o.id === "yes" ? "Use" : o.id === "no" ? "Don't use" : o.label) : o.label}
               </button>
             ))
           )}
@@ -818,7 +823,7 @@ function Game({
       ) : battle ? (
         <div className="battle-bar">
           <span>
-            {fighter(battle.attackerId)} {battle.attackPower} ⚔ {fighter(battle.targetId)} {defense}
+            <span className="side">{fighter(battle.attackerId)} {battle.attackPower}</span> ⚔ <span className="side">{fighter(battle.targetId)} {defense}</span>
             {battle.counterTotal > 0 && <small> (+{battle.counterTotal})</small>}
           </span>
           {battleStep && myPrompt ? (
@@ -826,13 +831,13 @@ function Game({
               <span className="hint">
                 {battleStep === "counter"
                   ? defense > battle.attackPower
-                    ? "Holding"
+                    ? "Safe"
                     : `Need +${battle.attackPower + 1000 - defense}`
-                  : "Block?"}
+                  : "Block with?"}
                 {battleStep === "counter" && stepIds.size === 0 && " · no counters"}
               </span>
               <button onClick={() => send({ type: "resolvePrompt", seat: ME, promptId: myPrompt.id, selectedIds: [] })}>
-                {battleStep === "counter" ? (defense > battle.attackPower ? "Done" : "Take it") : "No block"}
+                {battleStep === "counter" ? (defense > battle.attackPower ? "Done" : "No counter") : "No block"}
               </button>
             </>
           ) : (
@@ -853,6 +858,7 @@ function Game({
       {showLog && (
         <Log
           logs={view.logs}
+          oppName={opp.playerName}
           state={state}
           onCard={(cardId, instanceId) => {
             const c = instanceId ? state.cards[instanceId] : null;
@@ -863,7 +869,7 @@ function Game({
       )}
 
       {state.status === "setup" && (
-        <SetupSheet legal={legal} send={send} hand={view.players[ME].hand} mulliganed={state.setup.mulliganUsed[ME]} onPeek={(i) => setPreview({ group: view.players[ME].hand, start: i })} />
+        <SetupSheet legal={legal} send={send} hand={view.players[ME].hand} mulliganed={state.setup.mulliganUsed[ME]} oppName={opp.playerName} onPeek={(i) => setPreview({ group: view.players[ME].hand, start: i })} />
       )}
       {myPrompt && tray && !trigger && !boardPick && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} picked={picked} setPicked={setPicked} send={send} press={press} />}
       {myPrompt && !tray && !battleStep && !quick && <PromptSheet key={myPrompt.id} prompt={myPrompt} state={state} send={send} />}

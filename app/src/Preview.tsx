@@ -114,13 +114,17 @@ export function Preview({
                         {SHORT[a.type] ?? a.label}
                       </button>
                     ))}
+                {/* phones never show a title, so say why when nothing here can be pressed */}
+                {!pick && actions.length > 0 && actions.every((a) => !a.enabled) && actions[0].disabledReason && (
+                  <small className="why">{actions[0].disabledReason}</small>
+                )}
               </div>
             </div>
           );
         })}
       </div>
       <button className="pv-close" onClick={onClose} aria-label="close">✕</button>
-      <div className="pv-count">{cards.length} cards</div>
+      {cards.length > 1 && <div className="pv-count">{cards.length} cards</div>}
     </div>
   );
 }

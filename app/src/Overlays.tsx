@@ -133,6 +133,7 @@ export function SetupSheet({
   hand,
   onPeek,
   mulliganed,
+  oppName,
 }: {
   legal: LegalCommandDescriptor[];
   send: (c: EngineCommand) => void;
@@ -140,26 +141,34 @@ export function SetupSheet({
   onPeek: (i: number) => void;
   // there is only one mulligan, and the new hand is kept without asking
   mulliganed: boolean;
+  oppName: string;
 }) {
   const cmds = legal.filter((c) => c.type !== "concede");
   if (!cmds.length) {
     return (
-      <div className="banner">Waiting for the bot…</div>
+      <div className="banner">Waiting for {oppName}…</div>
     );
   }
   const title =
     cmds[0].type === "chooseJoKenPo"
-      ? "Rock, paper, scissors for first pick"
+      ? "Rock-Paper-Scissors decides who picks first"
       : cmds[0].type === "chooseFirstPlayer"
-        ? "You won the toss"
+        ? "You won Rock-Paper-Scissors"
         : cmds[0].type === "startGame"
           ? mulliganed ? "Your new hand" : "Ready"
           : "Keep this hand?";
+  const hint =
+    cmds[0].type === "startGame" && mulliganed
+      ? "You get one mulligan per game, so this hand is kept."
+      : cmds.some((c) => c.type === "mulligan")
+        ? "You can mulligan once: shuffle these back and draw 5 new cards."
+        : null;
   // the opening hand is the whole question, so it sits in the sheet at full size
   const keeping = hand.length > 0 && cmds.some((c) => c.type === "keepHand" || c.type === "startGame");
   return (
     <div className={`setup ${keeping ? "keep" : ""}`}>
       <h3>{title}</h3>
+      {hint && <p className="hint">{hint}</p>}
       {keeping && (
         <div className="opening">
           {hand.map((c, i) => (
@@ -170,12 +179,31 @@ export function SetupSheet({
       <div className="actions">
         {cmds.map((c, i) => (
           <button key={i} onClick={() => send(commandFor(c))}>
-            {c.label}
+            {setupLabel(c)}
           </button>
         ))}
       </div>
     </div>
   );
+}
+
+function setupLabel(c: LegalCommandDescriptor): string {
+  switch (c.type) {
+    case "chooseJoKenPo": {
+      const v = String(c.options![0].value);
+      return v[0].toUpperCase() + v.slice(1);
+    }
+    case "chooseFirstPlayer":
+      return c.targetIds![0] === ME ? "Go first" : "Go second";
+    case "mulligan":
+      return "Mulligan";
+    case "keepHand":
+      return "Keep hand";
+    case "startGame":
+      return "Start";
+    default:
+      return c.label;
+  }
 }
 
 function commandFor(c: LegalCommandDescriptor): EngineCommand {
@@ -194,6 +222,14 @@ function commandFor(c: LegalCommandDescriptor): EngineCommand {
       return { type: "endTurn", seat: ME };
   }
 }
+
+const HOW: Record<string, string> = {
+  leaderDamage: "The final hit landed on a Leader with no Life left.",
+  emptyDeck: "A deck ran out of cards.",
+  concession: "Conceded.",
+  effectWin: "A card effect decided it.",
+  judgeDecision: "Decided by a judge.",
+};
 
 export function GameOver({
   state,
@@ -214,8 +250,8 @@ export function GameOver({
   const theyAsked = !!rematchFrom && rematchFrom !== ME;
   return (
     <Sheet>
-      <h3>{won ? "You win" : `${oppName} wins`}</h3>
-      <p className="hint">{theyAsked ? `${oppName} wants a rematch` : (state.finishReason ?? "")}</p>
+      <h3>{state.winner === null ? "Draw" : won ? "You win" : `${oppName} wins`}</h3>
+      <p className="hint">{theyAsked ? `${oppName} wants a rematch` : HOW[state.finishReason ?? ""] ?? ""}</p>
       <div className="actions">
         <button className="ghost" onClick={onQuit}>Back to menu</button>
         {onRematch && (
