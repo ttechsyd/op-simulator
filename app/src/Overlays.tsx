@@ -187,6 +187,25 @@ export function SetupSheet({
   );
 }
 
+// only the first player may start the game, so when that's the opponent the mulliganed
+// hand is shown here instead, after the start, until it's dismissed
+export function NewHand({ hand, onPeek, onDone }: { hand: ProjectedCard[]; onPeek: (i: number) => void; onDone: () => void }) {
+  return (
+    <div className="setup keep">
+      <h3>Your new hand</h3>
+      <p className="hint">You get one mulligan per game, so this hand is kept.</p>
+      <div className="opening">
+        {hand.map((c, i) => (
+          <img key={c.instanceId ?? i} src={cardImage(c.cardId!)} alt={cardName(c.cardId!)} draggable={false} onClick={() => onPeek(i)} />
+        ))}
+      </div>
+      <div className="actions">
+        <button onClick={onDone}>OK</button>
+      </div>
+    </div>
+  );
+}
+
 function setupLabel(c: LegalCommandDescriptor): string {
   switch (c.type) {
     case "chooseJoKenPo": {

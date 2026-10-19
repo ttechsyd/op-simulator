@@ -9,7 +9,7 @@ import {
   type ProjectedCard,
 } from "@tcg/op-engine";
 import { Hand, OppHand, Phases, Seat } from "./Board";
-import { GameOver, PromptSheet, SetupSheet } from "./Overlays";
+import { GameOver, NewHand, PromptSheet, SetupSheet } from "./Overlays";
 import { Preview } from "./Preview";
 import { Tray, pickTargets, shownCard, trayMode } from "./Tray";
 import { Log, battleNumbers, filler, logDetail, noise, whose, wording } from "./Log";
@@ -408,6 +408,7 @@ function Game({
   }, [real.turnNumber]);
   const [layout, setLayout] = useState<Layout>([null, null, null, null, null]);
   const [showLog, setShowLog] = useState(false);
+  const [sawNewHand, setSawNewHand] = useState(false);
   useCardMotion(state, seat);
 
   const view = useMemo(() => projectStateForSeat(state, ME), [state]);
@@ -870,6 +871,9 @@ function Game({
 
       {state.status === "setup" && (
         <SetupSheet legal={legal} send={send} hand={view.players[ME].hand} mulliganed={state.setup.mulliganUsed[ME]} oppName={opp.playerName} onPeek={(i) => setPreview({ group: view.players[ME].hand, start: i })} />
+      )}
+      {state.status === "active" && state.setup.mulliganUsed[ME] && state.config.firstPlayer !== ME && !sawNewHand && state.turnNumber <= 2 && !myPrompt && (
+        <NewHand hand={view.players[ME].hand} onPeek={(i) => setPreview({ group: view.players[ME].hand, start: i })} onDone={() => setSawNewHand(true)} />
       )}
       {myPrompt && tray && !trigger && !boardPick && <Tray key={myPrompt.id} prompt={myPrompt} mode={tray} state={state} picked={picked} setPicked={setPicked} send={send} press={press} />}
       {myPrompt && !tray && !battleStep && !quick && <PromptSheet key={myPrompt.id} prompt={myPrompt} state={state} send={send} />}

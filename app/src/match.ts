@@ -185,8 +185,6 @@ function botCommand(state: MatchState, mode: Mode, level: Level): EngineCommand 
   if (mode === "self") return null;
   if (state.status === "setup") {
     const cmd = passOnlyStrategy(state, BOT, getLegalCommands(state, BOT));
-    // after a mulligan the player gets to look at the new hand; they press Start, not the bot
-    if (cmd?.type === "startGame" && state.setup.mulliganUsed[ME]) return null;
     return cmd && setupTypes.has(cmd.type) ? cmd : null;
   }
   if (state.status === "active" && state.activeSeat === BOT) {
