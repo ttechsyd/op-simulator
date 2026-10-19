@@ -32,6 +32,10 @@ export function saveDeck(deck: Deck) {
   store(decks);
 }
 
+export function appendDecks(more: Deck[]) {
+  store([...loadDecks(), ...more]);
+}
+
 export function deleteDeck(id: string) {
   store(loadDecks().filter((d) => d.id !== id));
 }

@@ -41,7 +41,7 @@ const params = new URLSearchParams(location.search);
 
 export default function App() {
   const [mine, setMine] = useState<DeckId>(params.get("mine") ?? "pre:ST01");
-  const [theirs, setTheirs] = useState<DeckId>(params.get("theirs") ?? "red-aggro");
+  const [theirs, setTheirs] = useState<DeckId>(params.get("theirs") ?? "saved:test-red-aggro");
   const [mode, setMode] = useState<Mode>(params.get("mode") === "self" ? "self" : params.get("mode") === "online" ? "online" : "bot");
   const [level, setLevel] = useState<Level>(() => (localStorage.getItem("opsim.level") === "hard" ? "hard" : "normal"));
   const pickLevel = (l: Level) => {
@@ -183,20 +183,23 @@ export default function App() {
   }
   if (!match) {
     const options = [...saved.map((d) => ({ id: `saved:${d.id}`, label: d.name })), ...DECKS];
+    // a deck deleted since it was picked falls back to the first one listed
+    const pickMine = options.some((o) => o.id === mine) ? mine : options[0].id;
+    const pickTheirs = options.some((o) => o.id === theirs) ? theirs : options[0].id;
     if (screen === "setup") {
       return (
         <div className="menu">
           <h1>{mode === "bot" ? "Player vs AI" : mode === "self" ? "Solo, both sides" : "Online with a friend"}</h1>
           <label>
             {mode === "self" ? "Player 1 deck" : "Your deck"}
-            <select value={mine} onChange={(e) => setMine(e.target.value as DeckId)}>
+            <select value={pickMine} onChange={(e) => setMine(e.target.value as DeckId)}>
               {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
             </select>
           </label>
           {mode !== "online" && (
             <label>
               {mode === "self" ? "Player 2 deck" : "AI deck"}
-              <select value={theirs} onChange={(e) => setTheirs(e.target.value as DeckId)}>
+              <select value={pickTheirs} onChange={(e) => setTheirs(e.target.value as DeckId)}>
                 {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
               </select>
             </label>
@@ -213,7 +216,7 @@ export default function App() {
           {mode === "online" ? (
             <button onClick={() => setScreen("lobby")}>{joinCode ? `Join room ${joinCode}` : inviteTo ? `Invite ${inviteTo.name}` : "Find a game"}</button>
           ) : (
-            <button onClick={() => setMatch({ table: localTable(newMatch(mine, theirs, mode), mode, level), seat: "south" })}>Play</button>
+            <button onClick={() => setMatch({ table: localTable(newMatch(pickMine, pickTheirs, mode), mode, level), seat: "south" })}>Play</button>
           )}
           <button className="ghost" onClick={() => setScreen("menu")}>Back</button>
         </div>

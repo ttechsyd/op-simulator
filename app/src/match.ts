@@ -15,7 +15,7 @@ import {
   type TestDeckId,
 } from "@tcg/op-engine";
 
-import { loadDecks, mainDeckList, preconDecks } from "./decks";
+import { appendDecks, loadDecks, mainDeckList, preconDecks } from "./decks";
 import { hardChoice, type Level } from "./bot";
 
 // which seat the screen belongs to. Against the bot it's always south; playing both
@@ -30,18 +30,34 @@ export function sitAt(seat: MatchSeat) {
 
 export type Mode = "bot" | "self" | "online";
 
-// "saved:<id>" is one of the user's decks, "pre:<code>" an official starter, the rest are the engine's test decks
+// "saved:<id>" is one of the user's decks, "pre:<code>" an official starter; a bare engine
+// test deck id (red-aggro …) still works from ?mine= / ?theirs=
 export type DeckId = string;
 
-export const DECKS: { id: DeckId; label: string }[] = [
-  ...preconDecks.map((d) => ({ id: d.id, label: d.label })),
-  { id: "red-aggro", label: "Test: red aggro (Zoro)" },
-  { id: "blue-control", label: "Test: blue control" },
-  { id: "green-midrange", label: "Test: green midrange" },
-  { id: "purple-ramp", label: "Test: purple ramp" },
-  { id: "black-removal", label: "Test: black removal" },
-  { id: "yellow-trigger", label: "Test: yellow trigger" },
+export const DECKS: { id: DeckId; label: string }[] = preconDecks.map((d) => ({ id: d.id, label: d.label }));
+
+const TESTS: [TestDeckId, string][] = [
+  ["red-aggro", "Test: red aggro (Zoro)"],
+  ["blue-control", "Test: blue control"],
+  ["green-midrange", "Test: green midrange"],
+  ["purple-ramp", "Test: purple ramp"],
+  ["black-removal", "Test: black removal"],
+  ["yellow-trigger", "Test: yellow trigger"],
 ];
+
+// The test decks used to be fixed entries in the deck picker. They're copied into the saved
+// decks once instead, so they can be edited or deleted like any other, and stay deleted.
+export function seedTestDecks() {
+  if (localStorage.getItem("opsim.testDecks")) return;
+  appendDecks(
+    TESTS.map(([id, name]) => {
+      const cards: Record<string, number> = {};
+      for (const c of TEST_DECKS[id].mainDeck) cards[c] = (cards[c] ?? 0) + 1;
+      return { id: `test-${id}`, name, leader: TEST_DECKS[id].leaderId, cards, updated: 0 };
+    }),
+  );
+  localStorage.setItem("opsim.testDecks", "1");
+}
 
 export function playerConfig(deck: DeckId, playerName: string): MatchPlayerConfig {
   if (deck.startsWith("saved:")) {
